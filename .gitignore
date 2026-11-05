@@ -1,0 +1,32 @@
+# Environments
+/venv
+/.venv
+
+# Python build / cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Data: keep folders, ignore contents
+/input/*
+!/input/.gitkeep
+/output/*
+!/output/.gitkeep
+*.MP4
+*.mp4
+*.bin
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Secrets
+.env
