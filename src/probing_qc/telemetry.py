@@ -10,7 +10,7 @@ from pathlib import Path
 GPMF_CODEC_TAG = "gpmd"
 
 
-def _require(tool: str) -> str:
+def require_tool(tool: str) -> str:
     path = shutil.which(tool)
     if path is None:
         raise RuntimeError(f"'{tool}' not found on PATH. Install FFmpeg and retry.")
@@ -20,7 +20,7 @@ def _require(tool: str) -> str:
 def probe_streams(video: Path) -> list[dict]:
     """Return ffprobe's stream list for ``video``."""
     result = subprocess.run(
-        [_require("ffprobe"), "-v", "error", "-show_streams", "-of", "json", str(video)],
+        [require_tool("ffprobe"), "-v", "error", "-show_streams", "-of", "json", str(video)],
         capture_output=True, text=True, check=True,
     )
     return json.loads(result.stdout).get("streams", [])
@@ -45,7 +45,7 @@ def read_gpmf(video: Path, stream_index: int | None = None) -> bytes:
     if stream_index is None:
         stream_index = find_gpmf_stream(video)
     result = subprocess.run(
-        [_require("ffmpeg"), "-v", "error", "-i", str(video),
+        [require_tool("ffmpeg"), "-v", "error", "-i", str(video),
          "-map", f"0:{stream_index}", "-c", "copy", "-f", "data", "-"],
         capture_output=True, check=True,
     )

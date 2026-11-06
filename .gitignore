@@ -30,3 +30,7 @@ Thumbs.db
 
 # Secrets
 .env
+
+# Downloaded models (fetched and checksum-verified on first use)
+/models/*
+!/models/.gitkeep
