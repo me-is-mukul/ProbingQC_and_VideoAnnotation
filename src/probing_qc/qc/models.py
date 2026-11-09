@@ -26,23 +26,29 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def ensure_hand_model(path: Path | None = None) -> Path:
+def is_verified(path: Path, expected_sha256: str) -> bool:
+    """True if ``path`` exists and its SHA-256 matches."""
+    return Path(path).is_file() and sha256(Path(path)) == expected_sha256
+
+
+def ensure_hand_model(path: Path | None = None, dest: Path = HAND_MODEL_PATH) -> Path:
     """Return a usable hand model path, downloading the pinned default if needed.
 
     A custom ``path`` is used as-is; only the default model is checksum-verified.
+    A cached file with a wrong checksum is replaced.
     """
     if path is not None:
-        if not path.is_file():
+        if not Path(path).is_file():
             raise FileNotFoundError(f"Hand model not found: {path}")
-        return path
-    if HAND_MODEL_PATH.is_file() and sha256(HAND_MODEL_PATH) == HAND_MODEL_SHA256:
-        return HAND_MODEL_PATH
+        return Path(path)
+    if is_verified(dest, HAND_MODEL_SHA256):
+        return dest
 
-    log.info("Downloading hand model to %s", HAND_MODEL_PATH)
-    HAND_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    log.info("Downloading hand model to %s", dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
     r = requests.get(HAND_MODEL_URL, timeout=120)
     r.raise_for_status()
     if hashlib.sha256(r.content).hexdigest() != HAND_MODEL_SHA256:
         raise RuntimeError("Downloaded hand model failed checksum verification")
-    HAND_MODEL_PATH.write_bytes(r.content)
-    return HAND_MODEL_PATH
+    dest.write_bytes(r.content)
+    return dest

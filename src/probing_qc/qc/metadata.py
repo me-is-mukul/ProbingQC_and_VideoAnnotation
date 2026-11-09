@@ -1,14 +1,17 @@
-"""Container-level technical metadata from ffprobe (no decoding)."""
+"""Container-level technical metadata from ffprobe (no decoding).
+
+``parse_probe`` is pure (ffprobe JSON in, ``VideoInfo`` out); ``probe_video``
+adds the FFmpeg call and the file size.
+"""
 
 from __future__ import annotations
 
-import json
-import subprocess
 from dataclasses import asdict, dataclass
 from fractions import Fraction
 from pathlib import Path
 
-from ..telemetry import GPMF_CODEC_TAG, require_tool
+from ..ffmpeg import ffprobe_json
+from ..imu.telemetry import has_gpmf
 
 
 @dataclass(frozen=True)
@@ -39,63 +42,53 @@ class VideoInfo:
         return asdict(self)
 
 
-def _rotation(stream: dict) -> int:
+def parse_rotation(stream: dict) -> int:
+    """Rotation in [0, 360) from the display matrix side data, else the legacy ``rotate`` tag."""
     for side in stream.get("side_data_list", []):
         if "rotation" in side:
             return int(side["rotation"]) % 360
     return int(stream.get("tags", {}).get("rotate", 0)) % 360
 
 
-def _int(value) -> int | None:
+def parse_fps(stream: dict) -> float:
+    """``avg_frame_rate``, falling back to ``r_frame_rate`` when it is missing or "0/0"."""
+    for key in ("avg_frame_rate", "r_frame_rate"):
+        value = stream.get(key)
+        if value and value != "0/0" and Fraction(value) > 0:
+            return float(Fraction(value))
+    raise ValueError("Video stream has no usable frame rate")
+
+
+def optional_int(value) -> int | None:
     return int(value) if value not in (None, "", "N/A") else None
 
 
-def probe_video(video: Path) -> VideoInfo:
-    video = Path(video)
-    result = subprocess.run(
-        [require_tool("ffprobe"), "-v", "error", "-show_format", "-show_streams",
-         "-of", "json", str(video)],
-        capture_output=True, text=True, check=True,
-    )
-    data = json.loads(result.stdout)
+def parse_probe(data: dict, path: str, size_bytes: int) -> VideoInfo:
+    """Build ``VideoInfo`` from ffprobe ``-show_format -show_streams`` JSON."""
     streams = data.get("streams", [])
     vs = next((s for s in streams if s.get("codec_type") == "video"), None)
     if vs is None:
-        raise ValueError(f"No video stream in {video}")
-
-    fps = float(Fraction(vs.get("avg_frame_rate") or vs["r_frame_rate"]))
-    duration = float(vs.get("duration") or data["format"]["duration"])
+        raise ValueError(f"No video stream in {path}")
+    fps = parse_fps(vs)
+    duration = float(vs.get("duration") or data.get("format", {})["duration"])
     return VideoInfo(
-        path=str(video),
-        size_bytes=video.stat().st_size,
+        path=path,
+        size_bytes=size_bytes,
         duration_s=duration,
         fps=fps,
-        frame_count=_int(vs.get("nb_frames")) or round(duration * fps),
+        frame_count=optional_int(vs.get("nb_frames")) or round(duration * fps),
         width=int(vs["width"]),
         height=int(vs["height"]),
         codec=vs["codec_name"],
         profile=vs.get("profile"),
         pix_fmt=vs.get("pix_fmt"),
-        video_bitrate=_int(vs.get("bit_rate")),
-        total_bitrate=_int(data.get("format", {}).get("bit_rate")),
-        rotation_deg=_rotation(vs),
-        has_gpmf=any(s.get("codec_tag_string") == GPMF_CODEC_TAG for s in streams),
+        video_bitrate=optional_int(vs.get("bit_rate")),
+        total_bitrate=optional_int(data.get("format", {}).get("bit_rate")),
+        rotation_deg=parse_rotation(vs),
+        has_gpmf=has_gpmf(streams),
     )
 
 
-def technical_metadata(info: VideoInfo) -> dict:
-    """The container-derived part of the report's ``technical`` section."""
-    w, h = info.display_size
-    kbps = lambda b: round(b / 1000, 1) if b else None  # noqa: E731
-    return {
-        "duration": round(info.duration_s, 3),
-        "fps": round(info.fps, 3),
-        "bitrate": {"video_kbps": kbps(info.video_bitrate), "total_kbps": kbps(info.total_bitrate)},
-        "codec": {"name": info.codec, "profile": info.profile, "pix_fmt": info.pix_fmt},
-        "orientation": {
-            "rotation_deg": info.rotation_deg,
-            "display": "landscape" if w >= h else "portrait",
-            "width": w,
-            "height": h,
-        },
-    }
+def probe_video(video: str | Path) -> VideoInfo:
+    video = Path(video)
+    return parse_probe(ffprobe_json(video), str(video), video.stat().st_size)

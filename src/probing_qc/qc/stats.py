@@ -49,3 +49,14 @@ def drop_short(mask, min_len: int) -> np.ndarray:
         if end - start < min_len:
             m[start:end] = False
     return m
+
+
+def circular_mean_deg(degrees) -> float | None:
+    """Mean direction of angles in degrees, in [0, 360); ``None`` for no angles.
+
+    Unlike the arithmetic mean, 350° and 10° average to 0°, not 180°.
+    """
+    r = np.radians(np.asarray(degrees, dtype=np.float64))
+    if r.size == 0:
+        return None
+    return float(np.degrees(np.arctan2(np.sin(r).mean(), np.cos(r).mean())) % 360)

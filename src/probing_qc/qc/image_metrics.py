@@ -31,7 +31,11 @@ def blockiness(gray: np.ndarray, block: int = 8) -> float:
 
     About 1.0 means no visible block grid; values well above 1 indicate
     compression blocking. Compute at native resolution so the grid aligns.
+    Returns NaN when the image is too small to hold a block boundary and an
+    in-block step in both directions (side <= ``block``).
     """
+    if min(gray.shape[:2]) <= block:
+        return float("nan")
     ratios = []
     # Mean absolute step per column boundary (horizontal) and per row boundary (vertical).
     h_steps = cv2.reduce(cv2.absdiff(gray[:, 1:], gray[:, :-1]), 0, cv2.REDUCE_AVG, dtype=cv2.CV_32F).ravel()

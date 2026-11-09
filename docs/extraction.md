@@ -1,6 +1,6 @@
 # IMU Extraction
 
-How `scripts/extraction.py` turns a GoPro video into `output/<video>_imu.csv`.
+How `probing-extract` (same as `python scripts/extraction.py`) turns a GoPro video into `output/<video>_imu.csv`. The code is in `src/probing_qc/imu/`, and the CLI is in `src/probing_qc/cli/extract.py`.
 
 ## Quick start
 
@@ -10,37 +10,43 @@ venv\Scripts\activate            # Linux/macOS: source venv/bin/activate
 pip install -r requirements.txt
 pip install -e ".[dev]"
 
-python scripts/download.py                  # optional: menu asks for a video URL, saves to input/
-python scripts/extraction.py GX010140.MP4   # writes output/GX010140_imu.csv
+probing-download                            # optional: menu asks for a video URL, saves to input/
+probing-extract GX010140.MP4                # writes output/GX010140_imu.csv
 ```
 
-`scripts/download.py` shows a menu: download from a URL, list the videos in `input/`, or quit. The download asks for the URL and a file name (taken from the URL by default) and shows a progress bar. It writes to a `.part` file first, so an interrupted download never leaves a broken video behind. For automation, `--url <URL> [--name FILE]` skips the menu.
+`probing-download` (`scripts/download.py`) shows a menu: download from a URL, list the videos in `input/`, or quit. The download asks for the URL and a file name (taken from the URL by default) and shows a progress bar. It writes to a `.part` file first, so an interrupted download never leaves a broken video behind. The default file name is decoded before the last path segment is taken, so an encoded `../` in the URL cannot write outside `input/`. For automation, `--url <URL> [--name FILE]` skips the menu. It exits with code 2 for an invalid URL or a URL that has no file name.
 
 **Requirements:** Python 3.10 or newer, and FFmpeg (`ffmpeg` and `ffprobe`) on `PATH`. No C compiler is needed.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `video` (positional) | — | File name inside the input directory |
+| `video` (positional) | — | A path, or a file name inside the input directory. A path that exists as given wins. |
 | `--input-dir` | `input/` | Folder the video is read from |
-| `--output-dir` | `output/` | Folder the CSV is written to |
+| `--output-dir` | `output/` | Folder the CSV is written to (created if missing) |
+| `--no-checks` | off | Skip the sanity checks after writing the CSV |
 | `-v`, `--verbose` | off | Debug logging |
+
+Exit codes: `0` success, `1` video not found. An exception (for example, no GPMF track) exits non-zero with a traceback.
 
 ## Pipeline
 
 ```
 input/GX010140.MP4
-   │  1. ffprobe: find the stream tagged "gpmd"           probing_qc.telemetry.find_gpmf_stream
+   │  1. ffprobe: find the stream tagged "gpmd"         imu/telemetry.py  find_gpmf_stream (pure: find_gpmf_index)
    ▼
-   │  2. ffmpeg -map 0:<idx> -c copy -f data -  (stdout)  probing_qc.telemetry.read_gpmf
+   │  2. ffmpeg -map 0:<idx> -c copy -f data - (stdout) imu/telemetry.py  read_gpmf -> ffmpeg.copy_stream
    ▼
 raw GPMF bytes (about 29 MiB for an 81-minute video, held in memory)
-   │  3. walk the KLV tree DEVC > STRM > {STMP, ORIN, SCAL, ACCL|GYRO}   probing_qc.gpmf / probing_qc.imu
+   │  3. walk DEVC > STRM > {STMP, ORIN, SCAL, ACCL|GYRO}  imu/gpmf.py iter_klv, imu/sensor.py extract_sensor
    ▼
-scaled samples + per-sample timestamps
-   │  4. reorder axes to X,Y,Z; resample GYRO onto the ACCL clock         probing_qc.imu.imu_dataframe
+scaled samples + per-sample timestamps                imu/sensor.py     apply_scale, payload_timestamps
+   │  4. axes to X,Y,Z; GYRO resampled onto ACCL clock  imu/sensor.py to_xyz, imu/table.py imu_dataframe
    ▼
-output/GX010140_imu.csv
+output/GX010140_imu.csv                               imu/table.py      write_imu_csv
+   │  5. sanity checks, logged as warnings            imu/checks.py     check_imu
 ```
+
+Every step after the FFmpeg calls is a pure function on bytes or arrays, so it can be tested with the synthetic builders in `tests/helpers.py`.
 
 ### 1. Locate the telemetry track
 
@@ -102,15 +108,22 @@ The parser walks this tree structurally. It does not search the bytes for `b"ACC
 
 ## Validation
 
-- `pytest` runs unit tests on synthetic GPMF streams: KLV parsing, padding, scaling, axis reordering and timing. These tests need neither a video nor FFmpeg.
-- `notebooks/main.ipynb` runs each stage on a real video and asserts:
-  - no NaNs
-  - strictly increasing timestamps
-  - IMU duration within 1 s of the video duration
-  - sample rate between 150 and 250 Hz
-  - median \|acc\| = 9.81 ± 0.5 m/s²
-  - mean gyroscope bias below 0.05 rad/s
-  - the script's CSV matches the in-memory result
+**Automated:** `pytest tests/test_gpmf.py tests/test_imu_sensor.py tests/test_imu_table.py` runs unit tests on synthetic GPMF streams. They cover KLV parsing, padding, scaling, axis reordering, timing, merging, the CSV round trip and the checks below. These tests need neither a video nor FFmpeg.
+
+**On every extraction:** `imu.checks.check_imu` runs on the real result and logs any failure as a warning (the CSV is still written):
+
+| Check | Passes when | Catches |
+|---|---|---|
+| `no_nans` | no NaN values | corrupt payloads |
+| `timestamps_increasing` | `timestamp_s` strictly increasing | bad `STMP`, payloads out of order |
+| `duration_matches_video` | IMU span within 1 s of the ffprobe video duration (skipped if ffprobe can't tell) | missing payloads, clock errors |
+| `sample_rate` | 150–250 Hz | wrong timing model |
+| `gravity_magnitude` | median \|acc\| = 9.81 ± 0.5 m/s² | wrong `SCAL` or units |
+| `gyro_bias` | \|mean gyro\| < 0.05 rad/s on every axis | wrong `SCAL`, axes mixed up |
+
+The limits are in `imu.checks.ImuLimits`. They suit a HERO12 (about 200 Hz) in normal use, so pass your own `ImuLimits` for other cameras or for very dynamic footage. GX010140 passes all checks.
+
+**Manual:** see the IMU sections of [tests/MANUAL_TESTING.md](../tests/MANUAL_TESTING.md).
 
 ## Changes from the original exploration notebook
 
@@ -125,4 +138,4 @@ The parser walks this tree structurally. It does not search the bytes for `b"ACC
 
 ## Extending
 
-Other sensors use the same `extract_sensor(data, KEY)` call. On the HERO12 these include `GRAV` (gravity vector), `CORI` (camera orientation quaternion) and `IORI`, and GPS models add `GPS5`/`GPS9`. Note that `SensorStream.samples()` assumes three channels. Use `np.vstack(sensor.payloads)` for other shapes.
+Other sensors use the same `probing_qc.imu.extract_sensor(data, KEY)` call. On the HERO12 these include `GRAV` (gravity vector), `CORI` (camera orientation quaternion) and `IORI`, and GPS models add `GPS5`/`GPS9`. Note that `SensorStream.samples()` assumes three channels. Use `np.vstack(sensor.payloads)` for other shapes.

@@ -50,6 +50,7 @@ class HandConfig:
 @dataclass
 class OrientationConfig:
     use_imu: bool = True             # add gravity statistics from the GoPro accelerometer
+    window_s: float = 1.0            # accelerometer averaging window for the gravity direction
 
 
 @dataclass
@@ -65,15 +66,59 @@ class QCConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> "QCConfig":
-        return _update(cls(), data)
+        return _update(cls(), data).validate()
 
     @classmethod
     def from_file(cls, path: str | Path) -> "QCConfig":
         return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
 
+    def override(self, section: str, **values) -> "QCConfig":
+        """Set the non-``None`` ``values`` on one section in place (used for CLI flags)."""
+        _update(getattr(self, section), {k: v for k, v in values.items() if v is not None})
+        return self
+
+    def validate(self) -> "QCConfig":
+        """Raise ``ValueError`` listing every out-of-range setting; return ``self`` if valid."""
+        errors = validation_errors(self)
+        if errors:
+            raise ValueError("Invalid QC config:\n  " + "\n  ".join(errors))
+        return self
+
+
+def _is_int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def validation_errors(cfg: QCConfig) -> list[str]:
+    s, i, h, o = cfg.sampling, cfg.image, cfg.hands, cfg.orientation
+    rules = [
+        (_is_int(s.frame_stride) and s.frame_stride >= 1, "sampling.frame_stride must be an integer >= 1"),
+        (s.start_s >= 0, "sampling.start_s must be >= 0"),
+        (s.max_seconds is None or s.max_seconds > 0, "sampling.max_seconds must be > 0 or null"),
+        (_is_int(i.analysis_width) and i.analysis_width >= 1, "image.analysis_width must be an integer >= 1"),
+        (_is_int(i.block_size) and i.block_size >= 2, "image.block_size must be an integer >= 2"),
+        (0 <= i.dark_luma < i.bright_luma <= 255, "image: need 0 <= dark_luma < bright_luma <= 255"),
+        (i.blur_sharpness >= 0, "image.blur_sharpness must be >= 0"),
+        (i.cast_factor >= 0, "image.cast_factor must be >= 0"),
+        (_is_int(h.input_width) and h.input_width >= 1, "hands.input_width must be an integer >= 1"),
+        (_is_int(h.num_hands) and h.num_hands >= 1, "hands.num_hands must be an integer >= 1"),
+        (all(0 <= c <= 1 for c in (h.min_detection_confidence, h.min_presence_confidence,
+                                    h.min_tracking_confidence)),
+         "hands.min_*_confidence must be within [0, 1]"),
+        (all(v >= 0 for v in (h.min_loss_s, h.grasp_curl_ratio, h.grasp_pinch_ratio,
+                              h.grasp_merge_gap_s, h.grasp_min_duration_s)),
+         "hands: durations and grasp ratios must be >= 0"),
+        (o.window_s > 0, "orientation.window_s must be > 0"),
+        (_is_int(cfg.max_error_messages) and cfg.max_error_messages >= 0,
+         "max_error_messages must be an integer >= 0"),
+    ]
+    return [message for ok, message in rules if not ok]
+
 
 def _update(obj, data: dict):
     """Recursively apply ``data`` onto dataclass ``obj``; unknown keys are errors."""
+    if not isinstance(data, dict):
+        raise TypeError(f"Expected an object for {type(obj).__name__}, got {type(data).__name__}")
     known = {f.name for f in fields(obj)}
     for key, value in data.items():
         if key not in known:

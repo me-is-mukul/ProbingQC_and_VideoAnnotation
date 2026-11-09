@@ -2,65 +2,81 @@
 
 Quality-control pipeline for GoPro probing videos. It has two stages:
 
-- **IMU extraction:** accelerometer and gyroscope data from the GPMF telemetry track, written to CSV.
+- **IMU extraction:** accelerometer and gyroscope data from the GPMF telemetry track, written to CSV and sanity-checked.
 - **Video QC:** technical quality and hand-tracking metrics for each video, written to JSON.
 
 ## Layout
 
 ```
-├── src/probing_qc/            # library code (importable package)
-│   ├── paths.py               #   project folders, input resolution
-│   ├── telemetry.py           #   ffprobe/ffmpeg: find and read the GPMF track
-│   ├── gpmf.py                #   GPMF KLV parser
-│   ├── imu.py                 #   ACCL/GYRO decoding, timestamps, DataFrame
-│   └── qc/                    #   video quality control
-│       ├── config.py          #     all settings and thresholds
-│       ├── metadata.py        #     container metrics (ffprobe)
-│       ├── frames.py          #     single-pass decoding, every Nth frame
-│       ├── image_metrics.py   #     luminance, sharpness, blockiness, colour cast
-│       ├── hand_tracking.py   #     MediaPipe 21-point hands, egocentric left/right
-│       ├── interaction.py     #     hand-object contact (pluggable)
-│       ├── hand_metrics.py    #     presence/loss/grasp aggregation
-│       ├── orientation.py     #     camera tilt from the IMU
-│       ├── analyzers.py       #     per-frame analyzer plug-ins
-│       └── pipeline.py        #     orchestration and report assembly
-├── scripts/
-│   ├── extraction.py          # CLI: input/<video> -> output/<video>_imu.csv
-│   ├── qc.py                  # CLI: input/<video> -> output/<video>_qc.json
-│   └── download.py            # interactive menu: download a video URL into input/
-├── tests/                     # pytest (synthetic data; no real video needed)
-├── notebooks/main.ipynb       # stage-by-stage IMU validation on a real video
-├── docs/                      # extraction.md, qc.md
-├── models/                    # downloaded model files (git-ignored)
-├── input/                     # videos (git-ignored)
-└── output/                    # generated CSV/JSON (git-ignored)
+├── src/probing_qc/                 # library code (importable package)
+│   ├── paths.py                    #   project folders, input resolution, output names
+│   ├── ffmpeg.py                   #   the only place that calls ffprobe/ffmpeg for data
+│   ├── download.py                 #   HTTP(S) video download (.part file, safe file names)
+│   ├── imu/                        #   stage 1: GPMF telemetry -> IMU table
+│   │   ├── telemetry.py            #     find and copy the GPMF track
+│   │   ├── gpmf.py                 #     KLV byte parser
+│   │   ├── sensor.py               #     one sensor: scaling, axis order, timestamps
+│   │   ├── table.py                #     ACCL + GYRO merge, summary, CSV
+│   │   └── checks.py               #     physical sanity checks
+│   ├── qc/                         #   stage 2: video quality control
+│   │   ├── config.py               #     every setting and threshold, with validation
+│   │   ├── metadata.py             #     container metrics (ffprobe JSON -> VideoInfo)
+│   │   ├── frames.py               #     single-pass decoding, every Nth frame
+│   │   ├── image_metrics.py        #     luminance, sharpness, blockiness, colour cast
+│   │   ├── stats.py                #     summaries, boolean runs, circular mean
+│   │   ├── hands/                  #     landmarks, MediaPipe detector, grasp heuristic, metrics
+│   │   ├── analyzers/              #     per-frame analyzer plug-ins (base, image, hands)
+│   │   ├── orientation.py          #     camera tilt from the IMU
+│   │   ├── models.py               #     pinned, checksum-verified model download
+│   │   ├── report.py               #     JSON report section builders
+│   │   └── pipeline.py             #     orchestration: run_qc()
+│   └── cli/                        #   command-line entry points (extract, qc, download)
+├── scripts/                        # thin wrappers: python scripts/<name>.py ...
+├── tests/                          # pytest suite + MANUAL_TESTING.md checklist
+├── docs/                           # extraction.md, qc.md
+├── models/                         # downloaded model files (git-ignored)
+├── input/                          # videos (git-ignored)
+└── output/                         # generated CSV/JSON (git-ignored)
 ```
+
+Design rule: parsing and maths are pure functions (bytes, dicts or arrays in, values out). Subprocess, network and file I/O sit in thin wrappers around them. So almost every module can be tested without a video, FFmpeg or MediaPipe. See [tests/MANUAL_TESTING.md](tests/MANUAL_TESTING.md).
 
 ## Setup
 
-You need Python 3.10 or newer and FFmpeg on `PATH`.
+You need Python 3.10 or newer (validated on 3.13.5) and FFmpeg on `PATH` (validated on 8.0.1).
 
 ```bash
 python -m venv venv
 venv\Scripts\activate      # Linux/macOS: source venv/bin/activate
-pip install -r requirements.txt
-pip install -e ".[dev]"
+pip install -r requirements.txt   # exact, validated versions
+pip install -e ".[dev]"           # the package itself + console scripts
 ```
 
 ## Usage
 
+Each command is available as a console script or through `scripts/`:
+
 ```bash
-python scripts/download.py                  # optional: menu asks for a URL
-python scripts/extraction.py GX010140.MP4   # -> output/GX010140_imu.csv
-python scripts/qc.py GX010140.MP4           # -> output/GX010140_qc.json
-pytest
+probing-download                            # = python scripts/download.py   (menu asks for a URL)
+probing-extract GX010140.MP4                # = python scripts/extraction.py -> output/GX010140_imu.csv
+probing-qc GX010140.MP4                     # = python scripts/qc.py         -> output/GX010140_qc.json
+pytest                                      # all automated tests
+pytest -m "not integration"                 # skip the tests that need FFmpeg
 ```
 
 See [docs/extraction.md](docs/extraction.md) for IMU extraction and [docs/qc.md](docs/qc.md) for the QC metrics, the report schema and how to extend it.
 
+## Reproducibility
+
+- `requirements.txt` pins the exact versions the pipeline was validated with.
+- Every QC report embeds its full `config` and a `runtime` block. That block records the package, Python, NumPy, pandas, OpenCV, FFmpeg and MediaPipe versions, plus the hand model's SHA-256. The same video, config and environment give the same report, apart from `runtime.started_at` and `elapsed_s`. `tests/test_integration.py::test_run_qc_is_deterministic` checks this.
+- The hand model is pinned by URL and SHA-256 and re-downloaded if the cached copy doesn't match.
+- Tests use synthetic data with fixed random seeds. The integration video is generated by FFmpeg's `testsrc2`.
+
 ## Contributing
 
-- Put reusable logic in `src/probing_qc/`. Keep `scripts/` as thin CLI wrappers.
-- Put new QC metrics in a `FrameAnalyzer` (see [docs/qc.md](docs/qc.md#extending)), and put their thresholds in `qc/config.py`.
-- Add a test in `tests/` for any change, and run `pytest` before you commit.
+- Put reusable logic in `src/probing_qc/`. Keep `cli/` thin and `scripts/` as one-line shims.
+- Keep new logic pure where possible, and put I/O in a separate small function.
+- Put new QC metrics in a `FrameAnalyzer` (see [docs/qc.md](docs/qc.md#extending)), and put their thresholds in `qc/config.py`, with a rule in `validation_errors`.
+- Add a test in `tests/` and a line in `tests/MANUAL_TESTING.md` for any change. Run `pytest` before you commit.
 - Commit notebooks with their outputs cleared. Never commit videos, models or generated data.
