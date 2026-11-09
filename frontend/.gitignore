@@ -1,0 +1,21 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# runtime data: uploads and job folders (videos, outputs)
+/.data/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# misc
+/coverage
+npm-debug.log*
+.DS_Store

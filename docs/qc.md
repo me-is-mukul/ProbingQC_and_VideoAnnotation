@@ -74,7 +74,7 @@ Changes from 1.0 are additive only: `config.orientation.window_s`, plus the envi
 | `codec.name`, `profile`, `pix_fmt` | — | from ffprobe |
 | `decode_errors.count` | lines | ffmpeg error-level messages during decoding (0 = clean) |
 | `decode_errors.ffmpeg_exit_code` | — | non-zero means decoding aborted |
-| `decode_errors.frames_expected` / `frames_decoded` | frames | a gap larger than about 1 means truncated or corrupt video. A difference of ±1 at `--start`/`--max-seconds` boundaries is normal. |
+| `decode_errors.frames_expected` / `frames_decoded` | frames | normally equal. A gap means truncated or corrupt video. Seek rounding at `--start`/`--max-seconds` can rarely account for 1 frame. Before the November 2026 frame-drop fix (see `frames.read_frames`), slow analysis lost one frame near the end, and the following frames got shifted timestamps; reports from before the fix should be regenerated. |
 | `decode_errors.messages` | — | first `max_error_messages` error lines |
 | `orientation.rotation_deg` | ° | rotation metadata (display matrix) |
 | `orientation.display` | — | `landscape` or `portrait` after rotation |

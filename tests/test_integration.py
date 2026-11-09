@@ -44,6 +44,21 @@ def test_sampler_window(synthetic_video):
     assert abs(len(frames) - sampler.expected_frames) <= 1
 
 
+def test_sampler_slow_consumer_gets_every_frame(synthetic_video, monkeypatch):
+    """Regression: a full prefetch queue at end of stream used to drop the last frame."""
+    import time
+
+    import probing_qc.qc.frames as frames_mod
+
+    monkeypatch.setattr(frames_mod, "PREFETCH_FRAMES", 2)
+    sampler = FrameSampler(probe_video(synthetic_video), stride=6)
+    indices = []
+    for frame in sampler:
+        time.sleep(0.05)  # analysis slower than decoding -> queue full when ffmpeg finishes
+        indices.append(frame.index)
+    assert indices == list(range(0, 60, 6))
+
+
 def test_sampler_early_stop_cleans_up(synthetic_video):
     sampler = FrameSampler(probe_video(synthetic_video), stride=1)
     for _ in zip(range(3), sampler):

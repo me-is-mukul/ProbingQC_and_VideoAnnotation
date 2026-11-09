@@ -161,6 +161,7 @@ cd tests && python           # REPL with the synthetic builders importable
 | 7.12 | Sampler yields every Nth frame with correct timestamps | synthetic video | ✅ | ✅ |
 | 7.13 | Sampler window `--start 1 --max-seconds 0.5` | synthetic video | first index 30, count within ±1 of expected | ✅ |
 | 7.14 | Consumer stops early (`break`) | — | ffmpeg terminated and reaped, no hang | ✅ |
+| 7.14b | **Slow consumer** (analysis slower than decoding, queue full at end of stream) | `PREFETCH_FRAMES=2`, sleep per frame | every frame delivered, in order, with correct indices (regression for the end-of-stream frame drop) | ✅ |
 | 7.15 | Corrupt/truncated video (cut a real MP4 with `head -c`) | — | `decode_errors.count > 0`, `frames_decoded < frames_expected` | — |
 | 7.16 | Invalid `--hwaccel foo` | real video | ffmpeg error → no frames → `RuntimeError("No frames decoded ...")` | — |
 | 7.17 | Variable-frame-rate phone clip | — | timestamps assume CFR; note drift (known limitation) | — |
@@ -227,6 +228,25 @@ cd tests && python           # REPL with the synthetic builders importable
 
 ---
 
+## 10b. Jobs, events and previews (`probing_qc.events`, `preview`, `job`, `cli.job`)
+
+| # | Objective / edge case | Input | Expected | Auto |
+|---|---|---|---|---|
+| 10b.1 | Every stdout line is one JSON event with `v`, `t`, `type` | any job | parses; nothing else on stdout | ✅ (also frontend contract test) |
+| 10b.2 | NaN/inf in event data or results | `data={"a": nan}` | written as `null` | ✅ |
+| 10b.3 | Non-ASCII (`m/s²`) on a cp1252 Windows console | real GoPro job | survives (stdout is reconfigured to UTF-8) | ✅ (StringIO) / — (console) |
+| 10b.4 | Progress throttling | long job | at most about 2 progress events per second per stage, plus a final 100% event | ✅ (Throttle) |
+| 10b.5 | Python `logging` → `log` events with the level kept; debug only with `-v` | — | ✓ | ✅ |
+| 10b.6 | Bucket size and means: `n=0`, `n<max`, partial last bucket, all-NaN bucket | — | 1 / no-op / mean of remainder / `null` | ✅ |
+| 10b.7 | Booleans become a 0–1 share per bucket | `[T,F,T,T]`, 2 points | `[0.5, 1.0]` | ✅ |
+| 10b.8 | Stage order: local file | synthetic | download skip, probe, imu skip (no GPMF), qc, results, result | ✅ |
+| 10b.9 | Stage failure is tagged | missing file / bad URL / corrupt GPMF | `error` event with `stage` = probe / download / imu; exit 1 | ✅ (first two) |
+| 10b.10 | Invalid options are rejected before any work | `--stride 0` | exit 2, one `error` event | ✅ |
+| 10b.11 | GPMF read once per job | GoPro job | one `ffmpeg -c copy` in process listing (orientation reuses it) | — |
+| 10b.12 | `results.json` has no server paths | any | `video.file` only, no `path` key | ✅ |
+| 10b.13 | URL job downloads to `source/` and reports byte progress | real URL | `progress` events with `unit: "bytes"`, total from `content-length` (or `null`) | — |
+| 10b.14 | Trimmed GoPro clip (`-ss 600 -c copy`) | 20 s clip | IMU timestamps start near 600 s (original STMP); the frontend marks the IMU charts as not linked to the video | — |
+
 ## 11. End-to-end on real footage (manual, slow)
 
 Run these in a scratch output folder so `output/` stays untouched:
@@ -240,7 +260,7 @@ probing-qc GX010140.MP4 --start 600 --max-seconds 60 --frames-csv --output-dir t
 |---|---|---|
 | 11.1 | IMU reference numbers | 970,019 samples, 4868.86 s, 199.2 Hz; "All IMU sanity checks passed" |
 | 11.2 | IMU CSV is stable across code changes | `pd.read_csv(old).equals(pd.read_csv(new))` is True |
-| 11.3 | QC window | `frames_analyzed: 449`, `analysis_fps: 7.493`, `decode_errors.count: 0` |
+| 11.3 | QC window | `frames_analyzed: 450`, `frames_expected == frames_decoded == 450`, `analysis_fps: 7.493`, `decode_errors.count: 0`. Reports made before the frame-drop fix show 449, with the last 7 rows' timestamps off by one stride. |
 | 11.4 | Reproducibility | a second run gives the same report except `runtime.started_at`/`elapsed_s` |
 | 11.5 | Hand model integrity | `runtime.hand_model_sha256 == fbc2a300…7cde1`; corrupting `models/hand_landmarker.task` triggers a re-download |
 | 11.6 | 2.7K / 59.94 fps clip (`input/mono samples/GX010146.MP4`) | runs; `analysis_fps ≈ 14.99` |

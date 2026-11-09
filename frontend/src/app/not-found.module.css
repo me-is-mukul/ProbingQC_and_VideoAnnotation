@@ -1,0 +1,22 @@
+.wrap {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 18vh 0;
+  text-align: center;
+}
+
+.code {
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.link {
+  color: var(--text-2);
+  transition: color 200ms var(--ease);
+}
+
+.link:hover {
+  color: var(--text-1);
+}

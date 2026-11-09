@@ -1,0 +1,30 @@
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.table td {
+  color: var(--text-1);
+}
+
+.table [data-numeric="true"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

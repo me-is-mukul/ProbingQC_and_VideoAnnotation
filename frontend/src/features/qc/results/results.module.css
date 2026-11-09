@@ -1,0 +1,142 @@
+.dashboard {
+  display: grid;
+  gap: 56px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.toolbarTitle {
+  display: grid;
+  gap: 6px;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.muted {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.section {
+  display: grid;
+  gap: 20px;
+  animation: rise-in 560ms var(--ease) both;
+}
+
+.sectionHead {
+  display: grid;
+  gap: 6px;
+}
+
+.sectionDescription {
+  max-width: 680px;
+  color: var(--text-2);
+  font-size: 15px;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin: 0;
+  padding: 18px 22px;
+  list-style: none;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.flags li {
+  display: grid;
+  gap: 2px;
+}
+
+.flagDetail {
+  padding-left: 24px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 24px 28px;
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
+  gap: 16px;
+}
+
+.checks {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 6px 22px;
+  list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.checks li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.checks li:last-child {
+  border-bottom: 0;
+}
+
+.checkValue {
+  color: var(--text-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.messages {
+  margin: 0;
+  padding: 16px 20px;
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  background: #050505;
+  border: 1px solid var(--border);
+  color: #ff9b9b;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+}

@@ -1,0 +1,10 @@
+.card {
+  min-width: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.padded {
+  padding: clamp(18px, 2.4vw, 28px);
+}

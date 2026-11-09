@@ -1,0 +1,37 @@
+.tile {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 18px 20px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  animation: rise-in var(--duration) var(--ease) both;
+}
+
+.label {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.value {
+  overflow: hidden;
+  color: var(--text-1);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile[data-hero="true"] .value {
+  font-size: 48px;
+  letter-spacing: -0.04em;
+}
+
+.detail {
+  color: var(--text-2);
+  font-size: 13px;
+}

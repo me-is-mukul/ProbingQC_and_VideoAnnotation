@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .sensor import extract_sensor
+from .sensor import SensorStream, extract_sensor
 from .telemetry import read_gpmf
 
 log = logging.getLogger(__name__)
@@ -27,13 +27,16 @@ def resample(t_target: np.ndarray, t_source: np.ndarray, values: np.ndarray) -> 
 
 
 def imu_dataframe(data: bytes) -> pd.DataFrame:
-    """Build the IMU table from raw GPMF bytes.
+    """Build the IMU table from raw GPMF bytes."""
+    return imu_table(extract_sensor(data, "ACCL"), extract_sensor(data, "GYRO"))
+
+
+def imu_table(acc: SensorStream, gyro: SensorStream) -> pd.DataFrame:
+    """Merge decoded ACCL and GYRO streams into one table.
 
     Rows follow the accelerometer clock. Gyroscope values are linearly
     interpolated onto it, which is a no-op when both sensors share timestamps.
     """
-    acc = extract_sensor(data, "ACCL")
-    gyro = extract_sensor(data, "GYRO")
     if acc.num_samples != gyro.num_samples:
         log.info("ACCL has %d samples, GYRO has %d; resampling GYRO onto ACCL clock",
                  acc.num_samples, gyro.num_samples)

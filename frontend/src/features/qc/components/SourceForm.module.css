@@ -1,0 +1,32 @@
+.card {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.form {
+  display: grid;
+  gap: 22px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.note {
+  max-width: 380px;
+  color: var(--text-3);
+  font-size: 13px;
+}

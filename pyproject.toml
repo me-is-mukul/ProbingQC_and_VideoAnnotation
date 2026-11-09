@@ -25,6 +25,7 @@ dev = ["pytest>=7", "ipykernel", "matplotlib"]
 probing-extract = "probing_qc.cli.extract:main"
 probing-qc = "probing_qc.cli.qc:main"
 probing-download = "probing_qc.cli.download:main"
+probing-job = "probing_qc.cli.job:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

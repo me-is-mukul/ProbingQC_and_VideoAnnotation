@@ -61,6 +61,7 @@ def gravity_stats_from_samples(t: np.ndarray, xyz: np.ndarray, start_s: float = 
 
 
 def gravity_stats(video: str | Path, start_s: float = 0.0, max_seconds: float | None = None,
-                  window_s: float = 1.0) -> dict:
-    acc = extract_sensor(read_gpmf(video), "ACCL")
+                  window_s: float = 1.0, gpmf_data: bytes | None = None) -> dict:
+    """``gpmf_data`` reuses telemetry already read from ``video`` (saves an FFmpeg pass)."""
+    acc = extract_sensor(gpmf_data if gpmf_data is not None else read_gpmf(video), "ACCL")
     return gravity_stats_from_samples(acc.timestamps(), acc.samples(), start_s, max_seconds, window_s)

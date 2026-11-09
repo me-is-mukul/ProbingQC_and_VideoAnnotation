@@ -143,9 +143,16 @@ def read_frames(stdout, frame_bytes: int, frames: "queue.Queue[bytes | None]",
                 except queue.Full:
                     continue
     finally:
-        while True:  # make room for the end marker if the consumer has gone
+        # Deliver the end marker. A full queue usually just means analysis is slower than
+        # decoding, so wait; only when the consumer has stopped (``stop`` set) is a buffered
+        # frame discarded to make room. Dropping unconditionally lost the last frame(s).
+        while True:
             try:
-                frames.put_nowait(None)
+                frames.put(None, timeout=0.5)
                 break
             except queue.Full:
-                frames.get_nowait()
+                if stop.is_set():
+                    try:
+                        frames.get_nowait()
+                    except queue.Empty:
+                        pass

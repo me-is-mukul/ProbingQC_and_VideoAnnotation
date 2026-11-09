@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 import pandas as pd
 from tqdm.auto import tqdm
@@ -17,7 +17,7 @@ from . import report as rpt
 from .analyzers import FrameAnalyzer, build_analyzers
 from .config import QCConfig
 from .frames import Frame, FrameSampler
-from .metadata import probe_video
+from .metadata import VideoInfo, probe_video
 from .orientation import gravity_stats
 
 log = logging.getLogger(__name__)
@@ -38,14 +38,23 @@ class QCResult:
             self.frames.to_csv(frames_csv_path, index=False, float_format=FRAMES_CSV_FLOAT_FORMAT)
 
 
-def analyse_frames(frames: Iterable[Frame], analyzers: list[FrameAnalyzer]) -> pd.DataFrame:
-    """Run every analyzer on every frame; one row per frame (``frame``, ``timestamp_s``, metrics)."""
+FrameCallback = Callable[[int, Frame], None]
+
+
+def analyse_frames(frames: Iterable[Frame], analyzers: list[FrameAnalyzer],
+                   on_frame: FrameCallback | None = None) -> pd.DataFrame:
+    """Run every analyzer on every frame; one row per frame (``frame``, ``timestamp_s``, metrics).
+
+    ``on_frame(count_so_far, frame)`` is called after each frame (progress reporting).
+    """
     rows: list[dict] = []
     for frame in frames:
         row = {"frame": frame.index, "timestamp_s": round(frame.timestamp_s, 4)}
         for analyzer in analyzers:
             row.update(analyzer.process(frame))
         rows.append(row)
+        if on_frame is not None:
+            on_frame(len(rows), frame)
     return pd.DataFrame(rows)
 
 
@@ -58,17 +67,22 @@ def summarize_sections(report: dict, analyzers: list[FrameAnalyzer], frames: pd.
 
 
 def run_qc(video: str | Path, cfg: QCConfig | None = None,
-           analyzers: list[FrameAnalyzer] | None = None, progress: bool = True) -> QCResult:
+           analyzers: list[FrameAnalyzer] | None = None, progress: bool = True,
+           on_frame: FrameCallback | None = None, info: VideoInfo | None = None,
+           gpmf_data: bytes | None = None) -> QCResult:
     """Analyse ``video`` and return the report plus the per-frame table.
 
     ``analyzers`` overrides the default set from ``build_analyzers(cfg)``.
+    ``on_frame`` receives (frames analysed so far, frame) for progress reporting.
+    ``info`` and ``gpmf_data`` let a caller that already probed the video or read
+    its telemetry skip doing it again.
     """
     cfg = (cfg or QCConfig()).validate()
     video = Path(video)
     started = datetime.now(timezone.utc)
     t0 = time.perf_counter()
 
-    info = probe_video(video)
+    info = info if info is not None else probe_video(video)
     s = cfg.sampling
     sampler = FrameSampler(info, s.frame_stride, s.start_s, s.max_seconds, s.hwaccel)
     analyzers = analyzers if analyzers is not None else build_analyzers(cfg)
@@ -76,7 +90,7 @@ def run_qc(video: str | Path, cfg: QCConfig | None = None,
     try:
         stream = tqdm(sampler, total=sampler.expected_frames, unit="frame",
                       desc=video.name, disable=not progress)
-        frames = analyse_frames(stream, analyzers)
+        frames = analyse_frames(stream, analyzers, on_frame)
         provenance = {a.name: a.info() for a in analyzers}
     finally:
         for analyzer in analyzers:
@@ -99,7 +113,7 @@ def run_qc(video: str | Path, cfg: QCConfig | None = None,
     if cfg.orientation.use_imu and info.has_gpmf:
         try:
             report["technical"]["orientation"]["imu"] = gravity_stats(
-                video, s.start_s, s.max_seconds, cfg.orientation.window_s)
+                video, s.start_s, s.max_seconds, cfg.orientation.window_s, gpmf_data)
         except Exception as e:  # orientation is supplementary; never fail the run for it
             log.warning("IMU orientation skipped: %s", e)
 

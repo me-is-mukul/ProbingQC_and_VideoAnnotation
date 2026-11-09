@@ -1,0 +1,159 @@
+.root {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* line key, mirroring the mark */
+.key {
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+}
+
+.plot {
+  position: relative;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+}
+
+.plot[data-clickable="true"] .hit {
+  cursor: pointer;
+}
+
+.svg {
+  display: block;
+  overflow: visible;
+}
+
+.grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.baseline {
+  stroke: var(--axis);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.yTick,
+.xTick {
+  fill: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.yTick {
+  text-anchor: end;
+  dominant-baseline: middle;
+}
+
+.xTick {
+  text-anchor: middle;
+}
+
+.line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.area {
+  opacity: 0.1;
+  stroke: none;
+}
+
+/* 2px ring in the surface colour keeps markers legible over lines */
+.dot {
+  stroke: var(--surface-2);
+  stroke-width: 2;
+}
+
+.endLabel {
+  fill: var(--text-2);
+  font-size: 11px;
+  dominant-baseline: middle;
+}
+
+.playhead {
+  stroke: var(--playhead);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.crosshair {
+  stroke: var(--text-3);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.hit {
+  fill: transparent;
+  touch-action: pan-y;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  gap: 4px;
+  min-width: 140px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(28, 28, 30, 0.92);
+  border: 1px solid var(--border-strong);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tooltipTime {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltipRow {
+  display: grid;
+  grid-template-columns: 14px auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.tooltipRow strong {
+  color: var(--text-1);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltipRow span:last-child {
+  color: var(--text-2);
+}
+
+.tooltipKey {
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+}

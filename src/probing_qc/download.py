@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
+from typing import Callable
 from urllib.parse import unquote, urlparse
 
 import requests
@@ -30,8 +31,15 @@ def filename_from_url(url: str) -> str:
     return "" if name in ("", ".", "..") else name
 
 
-def download(url: str, dest: Path, progress: bool = True, timeout: float = TIMEOUT_S) -> Path:
-    """Stream ``url`` to ``dest`` via a ``.part`` file so interrupted runs leave no corrupt video."""
+ProgressCallback = Callable[[int, "int | None"], None]
+
+
+def download(url: str, dest: Path, progress: bool = True, timeout: float = TIMEOUT_S,
+             on_progress: ProgressCallback | None = None) -> Path:
+    """Stream ``url`` to ``dest`` via a ``.part`` file so interrupted runs leave no corrupt video.
+
+    ``on_progress(bytes_so_far, total_bytes_or_None)`` is called after every chunk.
+    """
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     partial = dest.with_suffix(dest.suffix + ".part")
@@ -42,9 +50,13 @@ def download(url: str, dest: Path, progress: bool = True, timeout: float = TIMEO
             with open(partial, "wb") as f, tqdm(total=total, unit="B", unit_scale=True,
                                                 unit_divisor=1024, desc=dest.name,
                                                 disable=not progress) as bar:
+                received = 0
                 for chunk in r.iter_content(chunk_size=CHUNK_BYTES):
                     f.write(chunk)
                     bar.update(len(chunk))
+                    received += len(chunk)
+                    if on_progress is not None:
+                        on_progress(received, total)
         partial.replace(dest)
     finally:
         partial.unlink(missing_ok=True)

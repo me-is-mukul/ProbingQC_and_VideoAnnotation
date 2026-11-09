@@ -1,0 +1,130 @@
+.idle {
+  display: grid;
+  gap: 44px;
+  padding-top: 6vh;
+}
+
+.hero {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lede {
+  max-width: 620px;
+  color: var(--text-2);
+  font-size: clamp(17px, 1.6vw, 21px);
+  line-height: 1.45;
+}
+
+.banner {
+  display: grid;
+  gap: 8px;
+  max-width: 760px;
+  margin: 0 auto;
+  border-color: rgba(208, 59, 59, 0.5);
+}
+
+.banner ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.workspace {
+  display: grid;
+  gap: 28px;
+}
+
+.statusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.statusActions {
+  display: flex;
+  gap: 10px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pillDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.pill[data-phase="uploading"] .pillDot,
+.pill[data-phase="queued"] .pillDot,
+.pill[data-phase="processing"] .pillDot,
+.pill[data-phase="loadingResults"] .pillDot {
+  animation: blink 1.4s var(--ease) infinite;
+}
+
+.pill[data-phase="done"] .pillDot {
+  background: var(--good);
+}
+
+.pill[data-phase="failed"] .pillDot {
+  background: var(--critical);
+}
+
+.pill[data-phase="cancelled"] .pillDot {
+  background: var(--text-3);
+}
+
+.progress {
+  display: grid;
+  gap: 16px;
+}
+
+.error {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(208, 59, 59, 0.12);
+  color: #ffb4b4;
+  font-size: 14px;
+}
+
+.log {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.log summary {
+  margin-bottom: 14px;
+  color: var(--text-2);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.25;
+  }
+}

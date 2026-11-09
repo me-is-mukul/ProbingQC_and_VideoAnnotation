@@ -5,6 +5,8 @@ Quality-control pipeline for GoPro probing videos. It has two stages:
 - **IMU extraction:** accelerometer and gyroscope data from the GPMF telemetry track, written to CSV and sanity-checked.
 - **Video QC:** technical quality and hand-tracking metrics for each video, written to JSON.
 
+Both stages can run on their own from the command line, or together as one **job** (`probing-job`) that streams machine-readable progress. The **web interface** in [`frontend/`](frontend/README.md) uses jobs: upload a video or paste a link, watch the pipeline in an on-screen terminal, and explore the results as charts.
+
 ## Layout
 
 ```
@@ -12,6 +14,9 @@ Quality-control pipeline for GoPro probing videos. It has two stages:
 │   ├── paths.py                    #   project folders, input resolution, output names
 │   ├── ffmpeg.py                   #   the only place that calls ffprobe/ffmpeg for data
 │   ├── download.py                 #   HTTP(S) video download (.part file, safe file names)
+│   ├── events.py                   #   JSON Lines progress events (the contract with the frontend)
+│   ├── preview.py                  #   downsampling long tables into chart series
+│   ├── job.py                      #   end-to-end job: download → probe → IMU → QC → results.json
 │   ├── imu/                        #   stage 1: GPMF telemetry -> IMU table
 │   │   ├── telemetry.py            #     find and copy the GPMF track
 │   │   ├── gpmf.py                 #     KLV byte parser
@@ -30,10 +35,11 @@ Quality-control pipeline for GoPro probing videos. It has two stages:
 │   │   ├── models.py               #     pinned, checksum-verified model download
 │   │   ├── report.py               #     JSON report section builders
 │   │   └── pipeline.py             #     orchestration: run_qc()
-│   └── cli/                        #   command-line entry points (extract, qc, download)
+│   └── cli/                        #   command-line entry points (extract, qc, download, job)
 ├── scripts/                        # thin wrappers: python scripts/<name>.py ...
 ├── tests/                          # pytest suite + MANUAL_TESTING.md checklist
-├── docs/                           # extraction.md, qc.md
+├── docs/                           # extraction.md, qc.md, job.md (event + results contract)
+├── frontend/                       # Next.js + TypeScript web interface (own README, tests, checklist)
 ├── models/                         # downloaded model files (git-ignored)
 ├── input/                          # videos (git-ignored)
 └── output/                         # generated CSV/JSON (git-ignored)
@@ -60,11 +66,19 @@ Each command is available as a console script or through `scripts/`:
 probing-download                            # = python scripts/download.py   (menu asks for a URL)
 probing-extract GX010140.MP4                # = python scripts/extraction.py -> output/GX010140_imu.csv
 probing-qc GX010140.MP4                     # = python scripts/qc.py         -> output/GX010140_qc.json
+probing-job --job-dir jobs/x --video input/GX010140.MP4   # everything, with JSON Lines progress
 pytest                                      # all automated tests
 pytest -m "not integration"                 # skip the tests that need FFmpeg
+
+cd frontend && npm ci && npm run dev        # web interface on http://localhost:3000
 ```
 
-See [docs/extraction.md](docs/extraction.md) for IMU extraction and [docs/qc.md](docs/qc.md) for the QC metrics, the report schema and how to extend it.
+More documentation:
+
+- [docs/extraction.md](docs/extraction.md): IMU extraction.
+- [docs/qc.md](docs/qc.md): the QC metrics, the report schema, and how to extend them.
+- [docs/job.md](docs/job.md): jobs, the event stream and `results.json`.
+- [frontend/README.md](frontend/README.md) and [frontend/docs/ARCHITECTURE.md](frontend/docs/ARCHITECTURE.md): the web interface.
 
 ## Reproducibility
 
