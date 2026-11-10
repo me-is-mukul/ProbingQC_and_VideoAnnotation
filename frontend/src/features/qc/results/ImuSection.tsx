@@ -1,35 +1,37 @@
 "use client";
 
-import { useMemo } from "react";
-
-import { seriesColor, type SeriesSlot } from "@/components/charts/palette";
 import { StatTile } from "@/components/charts/StatTile";
-import { TimeSeriesCard } from "@/components/charts/TimeSeriesCard";
+import type { TimeBand } from "@/components/charts/TimeSeriesChart";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { formatNumber } from "@/lib/shared/format";
+import { imuAlignedWithVideo } from "@/lib/shared/probe/imu";
 import type { ImuBlock, QCResults } from "@/lib/shared/types";
 
+import type { ChartData } from "./chart-data";
 import styles from "./results.module.css";
+import { ResultsChart } from "./ResultsChart";
 import { Section, type SectionDataProps } from "./Section";
-import { column, imuAlignedWithVideo } from "./selectors";
 
-const AXES = ["x", "y", "z"] as const;
+export interface ImuSectionProps extends SectionDataProps {
+  results: QCResults;
+  imu: ImuBlock;
+  charts: readonly ChartData[];
+  /** Seconds the probing command removes; the probed IMU CSV drops the same time. */
+  bands: readonly TimeBand[];
+}
 
-export function ImuSection({ results, imu, currentTime, onSeek }: { results: QCResults; imu: ImuBlock } & SectionDataProps) {
-  const p = imu.preview;
+/** No probe lines here: the IMU is cut by time, following the red parts set on the other charts. */
+export function ImuSection({ results, imu, charts, bands, currentTime, onSeek }: ImuSectionProps) {
   const tilt = results.report.technical.orientation.imu?.tilt_deg;
-  const series = useMemo(() => {
-    const triple = (prefix: "acc" | "gyro") =>
-      AXES.map((axis, i) => ({ id: `${prefix}_${axis}`, label: axis.toUpperCase(), color: seriesColor(i as SeriesSlot), values: column(p, `${prefix}_${axis}`) }));
-    return { acc: triple("acc"), gyro: triple("gyro") };
-  }, [p]);
-  const fmt = (d: number) => (v: number) => formatNumber(v, d);
-  const aligned = imuAlignedWithVideo(p.t, results.video.duration_s);
-  const seek = aligned ? { currentTime, onSelectTime: onSeek } : {};
+  const aligned = imuAlignedWithVideo(imu.preview.t, results.video.duration_s);
   const timeNote = aligned ? "" : " · original recording time (trimmed clip), not linked to the video";
 
   return (
-    <Section id="imu" title="Motion" description="GoPro IMU telemetry for the whole recording, in the camera frame. Each point is the mean of one time bucket.">
+    <Section
+      id="imu"
+      title="Motion"
+      description="GoPro IMU telemetry for the whole recording, in the camera frame. Each point is the mean of one time bucket. Red marks the time the probing command removes; the probed IMU CSV drops the same time."
+    >
       <div className={styles.tiles}>
         <StatTile label="Samples" value={formatNumber(imu.summary.samples)} detail={`${formatNumber(imu.summary.duration_s, 1)} s of telemetry`} />
         <StatTile label="Sample rate" value={imu.summary.rate_hz ? `${formatNumber(imu.summary.rate_hz, 1)} Hz` : "—"} detail="Accelerometer clock" />
@@ -46,24 +48,16 @@ export function ImuSection({ results, imu, currentTime, onSeek }: { results: QCR
         ))}
       </ul>
       <div className={styles.charts}>
-        <TimeSeriesCard
-          title="Accelerometer"
-          subtitle={`Includes gravity · ${imu.units.acc ?? "m/s²"}${timeNote}`}
-          t={p.t}
-          series={series.acc}
-          formatValue={fmt(2)}
-          formatTick={fmt(0)}
-          {...seek}
-        />
-        <TimeSeriesCard
-          title="Gyroscope"
-          subtitle={`Angular velocity · ${imu.units.gyro ?? "rad/s"}${timeNote}`}
-          t={p.t}
-          series={series.gyro}
-          formatValue={fmt(3)}
-          formatTick={fmt(2)}
-          {...seek}
-        />
+        {charts.map((chart) => (
+          <ResultsChart
+            key={chart.id}
+            chart={chart}
+            subtitleSuffix={timeNote}
+            bands={aligned ? bands : undefined}
+            currentTime={aligned ? currentTime : undefined}
+            onSeek={aligned ? onSeek : undefined}
+          />
+        ))}
       </div>
     </Section>
   );

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { makePreview, makeResults } from "../../../../tests/fixtures/results";
 import {
-  column, distributionDetail, handMeters, handTiles, imageMeters, imageTiles, imuAlignedWithVideo, integrityFlags,
+  column, distributionDetail, handMeters, handTiles, imageMeters, imageTiles, integrityFlags,
   ordinal, overviewTiles, rollingMean, scale, windowFor, windowLabel,
 } from "./selectors";
 
@@ -67,12 +67,6 @@ describe("selectors", () => {
     expect(windowFor([0, 0.1, 0.2, 0.3], 1)).toBe(10);
     expect(windowFor([0, 5, 10], 1)).toBe(1);   // already coarser than 1 s
     expect(windowFor([0], 1)).toBe(1);
-  });
-
-  it("detects IMU timelines that don't match the video (trimmed clips)", () => {
-    expect(imuAlignedWithVideo([0.01, 0.02], 20)).toBe(true);
-    expect(imuAlignedWithVideo([600, 600.5], 20)).toBe(false);
-    expect(imuAlignedWithVideo([null], 20)).toBe(false);
   });
 
   it("reads preview columns safely", () => {

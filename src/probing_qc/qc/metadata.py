@@ -30,6 +30,8 @@ class VideoInfo:
     total_bitrate: int | None
     rotation_deg: int
     has_gpmf: bool
+    has_audio: bool = False
+    has_b_frames: int = 0  # ffprobe's reorder depth; 0 means frames are stored in display order
 
     @property
     def display_size(self) -> tuple[int, int]:
@@ -86,6 +88,8 @@ def parse_probe(data: dict, path: str, size_bytes: int) -> VideoInfo:
         total_bitrate=optional_int(data.get("format", {}).get("bit_rate")),
         rotation_deg=parse_rotation(vs),
         has_gpmf=has_gpmf(streams),
+        has_audio=any(s.get("codec_type") == "audio" for s in streams),
+        has_b_frames=optional_int(vs.get("has_b_frames")) or 0,
     )
 
 

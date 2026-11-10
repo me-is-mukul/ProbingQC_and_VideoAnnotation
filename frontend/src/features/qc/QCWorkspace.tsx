@@ -222,7 +222,7 @@ export function QCWorkspace() {
 
       {state.phase === "done" && state.results ? (
         <>
-          <ResultsDashboard results={state.results} currentTime={currentTime} onSeek={seek} onNewAnalysis={reset} />
+          <ResultsDashboard results={state.results} jobId={state.jobId} currentTime={currentTime} onSeek={seek} onNewAnalysis={reset} />
           <details className={styles.log}>
             <summary>Pipeline log</summary>
             <PipelineTerminal lines={state.lines} live={false} />

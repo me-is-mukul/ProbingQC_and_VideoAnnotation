@@ -113,6 +113,10 @@ def test_full_job_on_synthetic_video(synthetic_video, tmp_path):
     results = json.loads((tmp_path / RESULTS_FILE).read_text(encoding="utf-8"))
     assert results["schema_version"] == RESULTS_SCHEMA_VERSION
     assert results["video"]["file"] == "test.mp4" and "path" not in results["video"]
+    assert results["video"]["has_audio"] is False
+    assert results["video"]["has_b_frames"] > 0                # libx264 defaults use B-frames
+    assert results["keyframes"][0] == 0                          # first frame is always a keyframe
+    assert any(e["type"] == "log" and "keyframe" in e["message"] for e in evs)
     assert results["imu"] is None
     assert results["report"]["sampling"]["frames_analyzed"] == 12
     assert results["frames_preview"]["points"] == 4

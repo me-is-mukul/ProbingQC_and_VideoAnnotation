@@ -1,0 +1,46 @@
+.handle {
+  position: absolute;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 10px 0 8px;
+  transform: translate(-100%, -50%);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: rgba(28, 28, 30, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+  transition: color 160ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease);
+}
+
+.handle[data-active="true"] {
+  color: var(--text-1);
+  border-color: rgba(245, 245, 247, 0.5);
+}
+
+.handle:hover:not([aria-disabled="true"]) {
+  border-color: rgba(245, 245, 247, 0.7);
+}
+
+.handle[aria-disabled="true"] {
+  cursor: progress;
+  opacity: 0.55;
+}
+
+/* two short bars: "drag up or down" */
+.grip {
+  width: 8px;
+  height: 6px;
+  border-top: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  opacity: 0.8;
+}

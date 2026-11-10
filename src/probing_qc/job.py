@@ -31,6 +31,7 @@ from .imu.checks import check_imu
 from .imu.sensor import SensorStream, extract_sensor
 from .imu.table import imu_summary, imu_table, write_imu_csv
 from .imu.telemetry import read_gpmf
+from .keyframes import Keyframes, describe as describe_keyframes, read_keyframes
 from .paths import IMU_SUFFIX, QC_FRAMES_SUFFIX, QC_SUFFIX, output_path
 from .preview import DEFAULT_MAX_POINTS, frames_preview, imu_preview
 from .qc.config import QCConfig
@@ -38,7 +39,8 @@ from .qc.metadata import VideoInfo, probe_video
 from .qc.pipeline import QCResult, run_qc
 
 RESULTS_FILE = "results.json"
-RESULTS_SCHEMA_VERSION = "1.0"
+# 1.1: video.has_audio, video.has_b_frames and the top-level keyframes list.
+RESULTS_SCHEMA_VERSION = "1.1"
 STAGES = ("download", "probe", "imu", "qc", "results")
 MIB = 1024 * 1024
 
@@ -158,7 +160,8 @@ def video_summary(info: VideoInfo) -> dict:
     return d
 
 
-def stage_probe(video: Path, ev: EventEmitter) -> VideoInfo:
+def stage_probe(video: Path, ev: EventEmitter) -> tuple[VideoInfo, Keyframes]:
+    """Container metadata plus the keyframe index (``None`` when it could not be read)."""
     with stage(ev, "probe", "Reading container metadata (ffprobe)") as out:
         info = probe_video(video)
         w, h = info.display_size
@@ -166,9 +169,26 @@ def stage_probe(video: Path, ev: EventEmitter) -> VideoInfo:
                        f"{info.frame_count} frames, {human_bytes(info.size_bytes)}", logger="probe")
         ev.log("info", "GPMF telemetry track found" if info.has_gpmf
                else "No GPMF telemetry track (not a GoPro file?)", logger="probe")
+        ev.log("info", f"Audio track: {'yes' if info.has_audio else 'no'}; "
+                       f"B-frames: {'yes' if info.has_b_frames else 'no'}", logger="probe")
+        keyframes = scan_keyframes(video, info, ev)
         out["message"] = f"{info.codec.upper()} {w}x{h}, {info.duration_s:.1f} s"
         out["data"] = video_summary(info)
-    return info
+    return info, keyframes
+
+
+def scan_keyframes(video: Path, info: VideoInfo, ev: EventEmitter) -> Keyframes:
+    """Keyframe index for fast probing. Supplementary: a failure is logged, never fatal."""
+    ev.log("info", "Indexing keyframes (ffprobe packet scan, reads the file once)", logger="probe")
+    try:
+        keyframes = read_keyframes(video)
+    except Exception as e:
+        ev.log("warning", f"Keyframe index unavailable ({e}); fast probing will be disabled",
+               logger="probe")
+        return None
+    ev.log("info" if keyframes is not None else "warning", describe_keyframes(keyframes, info.fps),
+           logger="probe")
+    return keyframes
 
 
 def _describe_sensor(s: SensorStream) -> str:
@@ -257,13 +277,15 @@ def stage_qc(video: Path, info: VideoInfo, cfg: QCConfig, out_dir: Path, ev: Eve
 
 
 def build_results(source: dict, options: JobOptions, info: VideoInfo, qc: QCResult,
-                  imu: dict | None, max_points: int, video: Path) -> dict:
+                  imu: dict | None, max_points: int, video: Path,
+                  keyframes: Keyframes = None) -> dict:
     return {
         "schema_version": RESULTS_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "source": source,
         "options": options.to_dict(),
         "video": video_summary(info),
+        "keyframes": keyframes,
         "report": qc.report,
         "imu": imu,
         "frames_preview": frames_preview(qc.frames, max_points),
@@ -295,12 +317,12 @@ def run_job(job_dir: Path, ev: EventEmitter, video: Path | None = None, url: str
         ev.stage("download", "skip", "Local file; nothing to download")
         source = {"kind": "file", "file": video.name}
 
-    info = stage_probe(video, ev)
+    info, keyframes = stage_probe(video, ev)
     imu, gpmf = stage_imu(video, info, paths.out_dir, ev, options.imu, options.max_points)
     qc = stage_qc(video, info, cfg, paths.out_dir, ev, gpmf)
 
     with stage(ev, "results", "Building chart data") as out:
-        results = build_results(source, options, info, qc, imu, options.max_points, video)
+        results = build_results(source, options, info, qc, imu, options.max_points, video, keyframes)
         tmp = paths.results.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(json_safe(results), allow_nan=False, default=_json_default),
                        encoding="utf-8")

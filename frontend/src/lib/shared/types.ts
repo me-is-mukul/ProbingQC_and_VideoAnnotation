@@ -205,7 +205,14 @@ export interface VideoSummary {
   total_bitrate: number | null;
   rotation_deg: number;
   has_gpmf: boolean;
+  /** Results 1.1+; absent in 1.0. */
+  has_audio?: boolean;
+  /** ffprobe's B-frame reorder depth (0 = display order). Results 1.1+; absent in 1.0. */
+  has_b_frames?: number;
 }
+
+/** Keyframe frame numbers, "all" for all-intra video, null when they could not be read. */
+export type Keyframes = number[] | "all" | null;
 
 /** Columnar, downsampled series: `t` plus one array per column, all the same length. */
 export interface SeriesPreview {
@@ -236,6 +243,8 @@ export interface QCResults {
   source: { kind: string; file: string; url?: string };
   options: Record<string, unknown>;
   video: VideoSummary;
+  /** Results 1.1+; absent (undefined) in 1.0. */
+  keyframes?: Keyframes;
   report: QCReport;
   imu: ImuBlock | null;
   frames_preview: SeriesPreview;

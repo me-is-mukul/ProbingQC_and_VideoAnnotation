@@ -1,0 +1,129 @@
+.root {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.plot {
+  position: relative;
+  min-width: 0;
+}
+
+.plot[data-clickable="true"] .hit {
+  cursor: pointer;
+}
+
+.svg {
+  display: block;
+  overflow: visible;
+}
+
+.track {
+  fill: var(--surface-4);
+}
+
+.removed {
+  fill: var(--critical);
+}
+
+.notAnalysedBg {
+  fill: var(--surface-3);
+}
+
+.notAnalysedLine {
+  stroke: var(--text-3);
+  stroke-width: 1.5;
+}
+
+.extraBg {
+  fill: var(--cut-extra);
+}
+
+.extraLine {
+  stroke: var(--critical);
+  stroke-width: 2;
+}
+
+.playhead {
+  stroke: var(--text-1);
+  stroke-width: 2;
+}
+
+.guide {
+  stroke: rgba(245, 245, 247, 0.5);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.hit {
+  fill: transparent;
+}
+
+.tick {
+  fill: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+}
+
+.tick[data-edge="start"] {
+  text-anchor: start;
+}
+
+.tick[data-edge="end"] {
+  text-anchor: end;
+}
+
+.readout {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(28, 28, 30, 0.92);
+  border: 1px solid var(--border-strong);
+  color: var(--text-1);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch {
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.swatch[data-kind="removed"] {
+  background: var(--critical);
+}
+
+.swatch[data-kind="extra"] {
+  background: repeating-linear-gradient(45deg, var(--critical) 0 2px, var(--cut-extra) 2px 5px);
+}
+
+.swatch[data-kind="kept"] {
+  background: var(--surface-4);
+}
+
+.swatch[data-kind="notAnalysed"] {
+  background: repeating-linear-gradient(45deg, var(--text-3) 0 1.5px, var(--surface-3) 1.5px 5px);
+}

@@ -35,6 +35,11 @@
   gap: 10px;
 }
 
+/* scroll target of "Probing command": clear of the sticky header */
+.anchor {
+  scroll-margin-top: 88px;
+}
+
 .section {
   display: grid;
   gap: 20px;

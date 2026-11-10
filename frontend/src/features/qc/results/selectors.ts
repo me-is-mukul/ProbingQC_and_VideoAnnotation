@@ -94,15 +94,6 @@ export function rollingMean(values: ReadonlyArray<number | null>, window: number
   return out;
 }
 
-/**
- * True when IMU timestamps fall on the video's own timeline. Trimmed clips keep the
- * original recording's GPMF timestamps (e.g. starting at 600 s), so seeking would miss.
- */
-export function imuAlignedWithVideo(imuT: ReadonlyArray<number | null>, videoDuration: number): boolean {
-  const first = imuT.find((v): v is number => typeof v === "number");
-  return first !== undefined && first > -1 && first < Math.max(1, videoDuration);
-}
-
 export function ordinal(n: number): string {
   const mod100 = n % 100;
   if (mod100 >= 11 && mod100 <= 13) return `${n}th`;

@@ -4,7 +4,7 @@ A Next.js (App Router) and TypeScript front end for the probing QC pipeline. It 
 
 | Tab | Status |
 |---|---|
-| **QC** | Upload a video or paste a link. The pipeline (metadata → IMU → video QC) runs on the server, an on-screen terminal streams every step live, and the results appear as charts below the video. |
+| **QC** | Upload a video or paste a link. The pipeline (metadata → IMU → video QC) runs on the server, an on-screen terminal streams every step live, and the results appear as charts below the video. **Probing:** drag a line on any image or hand chart to select what to remove; the figures update for the part that is kept, a red timeline shows what will be cut, and the page writes the ffmpeg command (exact or lossless) plus a matching cut of the IMU data. |
 | **Annotation** | Placeholder ("under working") |
 | **Visualisations** | Placeholder ("under working") |
 
@@ -64,6 +64,7 @@ src/
 │       ├── uploads/             PUT   raw-body upload, streamed to disk
 │       ├── jobs/                POST  start a job
 │       └── jobs/[id]/           GET status · DELETE cancel · events (SSE) · results · video (Range)
+│                                · frames (per-frame CSV) · probe/imu (POST: IMU CSV minus removed time)
 ├── lib/
 │   ├── shared/                  isomorphic: types, event parser, validation, formatting, SSE codec
 │   ├── server/                  server only: config, paths, job store/queue/service, process runner, uploads
@@ -71,7 +72,8 @@ src/
 ├── features/qc/                 the QC tab
 │   ├── state/                   pure reducer (session), terminal lines, options, URL state
 │   ├── components/              SourceForm, UploadDropzone, OptionsPanel, StageTracker, PipelineTerminal, VideoStage
-│   ├── results/                 ResultsDashboard + one component per section, pure selectors
+│   ├── results/                 ResultsDashboard + one component per section, chart definitions, pure selectors
+│   ├── probe/                   probing: lines reducer, plan, keyframes, metric port, ffmpeg command, panel, timeline
 │   └── QCWorkspace.tsx          the only component with side effects
 ├── components/                  reusable UI: layout, ui primitives, charts (SVG, no chart library)
 ├── hooks/                       useJobEvents (SSE), useElementWidth
@@ -88,3 +90,4 @@ Tests sit next to the code they cover (`*.test.ts[x]`). Component tests opt into
 - **Validation is shared.** The browser validates for instant feedback, and the API validates again with the same functions as the authority.
 - **Every chart has a table view**, and a legend whenever it shows two or more series. Series colours come from `components/charts/palette.ts` in fixed order. That palette is validated for colour-vision deficiency (CVD), so don't add colours ad hoc.
 - **Contract changes** to events or `results.json` need matching changes in Python and TypeScript. See [../docs/job.md](../docs/job.md).
+- **Metric changes** in Python (image or hand metrics) need the probe port updated: regenerate `tests/fixtures/probe-parity.json` with `python tests/probe_parity.py` (from the repo root) and make `npm test` pass. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#probing).

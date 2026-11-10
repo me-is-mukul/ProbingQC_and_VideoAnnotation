@@ -20,9 +20,15 @@ EventSource ◀── GET /api/jobs/:id/events (SSE: replay from Last-Event-ID, 
    │
    ▼  sessionReducer (pure) → StageTracker + PipelineTerminal
    │
-   └─ on job:succeeded ── GET /api/jobs/:id/results ─▶ results.json (~100–300 KB, cached immutable)
+   └─ on job:succeeded ── GET /api/jobs/:id/results ─▶ results.json (~100–300 KB, gzip, cached immutable)
                               ▼
                          ResultsDashboard (selectors → SVG charts), video stays on screen
+                              │
+                              └─ GET /api/jobs/:id/frames ─▶ per-frame CSV (gzip, cached immutable)
+                                   ▼
+                              probing in the browser: lines → plan → metrics + ffmpeg command
+                                   │
+                                   └─ POST /api/jobs/:id/probe/imu {removed} ─▶ IMU CSV minus the red parts (streamed)
 ```
 
 ## Modules and their seams
@@ -40,6 +46,8 @@ EventSource ◀── GET /api/jobs/:id/events (SSE: replay from Last-Event-ID, 
 | `lib/server/jobs/job-service.ts` | Lifecycle: queued → running → succeeded / failed / cancelled; records then broadcasts | — |
 | `lib/server/jobs/event-stream.ts` | SSE stream: replay, live, de-duplicate by `seq`, heartbeat, close on terminal event | — |
 | `lib/server/container.ts` | The only place concrete classes are chosen (one per process, survives dev reloads) | Wire the replacements here |
+| `lib/server/compress.ts` | gzip for API responses (Next.js compresses pages, not route handlers) | A CDN or load balancer can take over |
+| `lib/server/probe/imu-filter.ts` | Streams the IMU CSV without the removed intervals, adding `probed_time_s` | — |
 
 Every route handler is a few lines that validate input and call one service method.
 
@@ -54,9 +62,13 @@ Cloud Run bills CPU-seconds and memory while requests are in flight, plus networ
 | Chart rendering, smoothing, tooltips, table views, formatting | **Browser** | Free for us; the pages are static, and there's no server-side rendering per request. |
 | Video playback | **Browser**, from the user's own file (blob URL) or the link's origin | Streaming a multi-GB video back from our server would be the single largest egress cost. `/api/jobs/:id/video` is only a fallback, used when the origin can't be played or for a reopened upload. |
 | Report download | **Browser**, from the results already in memory | No second request |
+| Probing: lines, intersection, metrics of the kept part, timeline, ffmpeg command, plan file | **Browser** | Runs on every drag; a server round trip per drag would cost CPU-seconds and feel slow. The numbers are a port of the Python metrics, checked against Python outputs in CI. |
+| Frame table for probing | **Server streams the CSV the job already wrote**, gzip | About 110 bytes per analysed frame before compression (≈ 27 KB gzip-encoded to 9 KB for 300 frames), fetched once per results view and cached immutable. Nothing is recomputed. |
+| Probed IMU CSV | **Server**, streamed row by row on request | The full IMU table is tens of MB, so it never goes to the browser unless asked for; nothing is stored. |
+| Cutting the video | **The user's machine** (the generated ffmpeg command) | Our servers never re-encode or serve the cut video. |
 | Progress | **SSE** (one long-lived request) with a 15 s heartbeat | No polling traffic. Reconnects resume with `Last-Event-ID`, so nothing is re-sent. |
 | Static pages (`/qc`, `/annotation`, `/visualisations`) | Prerendered at build time | CDN-cacheable, no compute per view |
-| Results JSON | `Cache-Control: private, max-age=31536000, immutable` | A revisit is free; it is immutable once the job has finished. |
+| Results JSON | gzip (about 3× smaller) and `Cache-Control: private, max-age=31536000, immutable` | A revisit is free; it is immutable once the job has finished. Route handlers are compressed by `compress.ts`; Next.js only compresses pages. |
 
 Concurrency is capped (`MAX_CONCURRENT_JOBS`, default 1) because video QC saturates the CPU. Running jobs in parallel on one instance makes all of them slower and costs more in total.
 
@@ -70,6 +82,23 @@ The current implementation keeps state on local disk and in one Node process. Th
 
 The interfaces above are the seams; the routes, the client and the event contract stay unchanged.
 
+## Probing
+
+Each image and hand chart has a draggable line, with a switch for which side it selects (below, the default, or above). The plan is built in `features/qc/probe/` from pure modules:
+
+| Step | Module | Rule |
+|---|---|---|
+| Chart values | `results/chart-data.ts` | One definition per chart. The sections draw these values and the plan selects on the same arrays, so what is under a line on screen is exactly what is selected. Hand charts are one chart per hand. |
+| Chart point → frames | `probe/selection.ts` | A point is one preview bucket: from its first analysed frame to the next point's first analysed frame (each analysed frame stands for the `stride − 1` frames after it). Frame numbers come from the frames CSV. |
+| Selection | `probe/selection.ts` | Strictly below / above the line. A missing value is never selected. |
+| Plan | `probe/plan.ts` | Removed = intersection of the selections of every *active* line (an untouched line takes no part). Everything is in integer frame numbers. Time outside the analysed window is always kept. |
+| Lossless mode | `probe/keyframes.ts` | Kept parts start on the next keyframe, so more is removed, never less. Disabled for videos with B-frames and for results without a keyframe index (1.0). |
+| Metrics of the kept part | `probe/metrics.ts`, `numeric.ts`, `stats.ts` | Port of the Python image and hand metrics, including numpy's pairwise summation and percentile interpolation and CPython's rounding. `frontend/tests/fixtures/probe-parity.json` is generated by `tests/probe_parity.py` from the real Python functions, and the TypeScript must match it exactly. The CSV stores 4 decimals, so a frame within 0.00005 of a threshold could count differently from the report. With no line set, the page shows the report's own figures. |
+| Command | `probe/ffmpeg-command.ts` | Exact: `split` → `trim` by frame number / `atrim` by time → `concat`, re-encoded (H.264 CRF 18, AAC); graphs over 3,000 characters go into a script file read with `-/filter_complex` (ffmpeg 7.0+). `aselect` is avoided: in ffmpeg 8.0.1 it passes every audio frame. Lossless: an ffconcat list with `inpoint` rounded up and `outpoint` rounded down to the microsecond. |
+| IMU | `lib/shared/probe/imu.ts` | A sample is removed when its `timestamp_s` (seconds since the recording started) falls in a removed interval; kept rows get `probed_time_s`. Refused for trimmed clips, whose IMU clock doesn't start with the video. |
+
+Verified on GoPro HEVC with ffmpeg 8.0.1 (`tests/integration/probe.integration.test.ts` repeats it on a synthetic clip): the exact output has exactly the planned number of frames and each frame at a cut is the planned source frame; every frame of the lossless output is bit-identical to the planned source frame.
+
 ## State on the client
 
 `features/qc/state/session.ts` is a pure reducer with phases `idle → uploading → queued → processing → loadingResults → done | failed | cancelled`. It ignores events whose `seq` it has already applied (reconnect replays) and events that arrive after a reset. `QCWorkspace.tsx` is the only component with side effects: XHR upload, job creation, EventSource, results fetch, video seeking, and the `?job=<id>` address-bar state. That state makes a page reload or a shared link reopen a job by replaying its events.
@@ -81,6 +110,7 @@ The interfaces above are the seams; the routes, the client and the event contrac
 - **Processes:** arguments are passed as an array (no shell), and URLs are one argument.
 - **Uploads:** only `.mp4` and `.mov`, size-limited while streaming, and partial files are deleted.
 - **Headers:** `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`. Error responses never include stack traces.
+- **Probing:** output paths come from the job's own `results.json` and are confined to the job folder. Removed-interval lists are validated (sorted, disjoint, ≤ 100,000, body ≤ 8 MB). The generated command quotes only names that are literal inside double quotes in bash, PowerShell and cmd.exe, and otherwise asks the user to rename the file to `input.mp4`.
 - **No authentication yet.** Put the app behind IAP or the company SSO before exposing it.
 
 ## Charts

@@ -28,6 +28,11 @@
   border-radius: 2px;
 }
 
+.plotWrap {
+  position: relative;
+  min-width: 0;
+}
+
 .plot {
   position: relative;
   min-width: 0;
@@ -93,6 +98,31 @@
   fill: var(--text-2);
   font-size: 11px;
   dominant-baseline: middle;
+}
+
+/* time ranges a probe removes: a red wash plus a solid mark above the plot */
+.band {
+  fill: var(--cut-fill);
+}
+
+.bandMark {
+  fill: var(--critical);
+}
+
+/* the region a threshold line selects */
+.zone {
+  fill: var(--probe-zone);
+}
+
+.threshold {
+  stroke: var(--probe-line);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  shape-rendering: crispEdges;
+}
+
+.threshold[data-active="true"] {
+  stroke-dasharray: none;
 }
 
 .playhead {

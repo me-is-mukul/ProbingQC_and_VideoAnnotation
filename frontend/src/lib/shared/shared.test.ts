@@ -74,6 +74,10 @@ describe("format", () => {
     expect(formatTimecode(61.9)).toBe("1:01");
     expect(formatTimecode(4868.86)).toBe("1:21:08");
     expect(formatTimecode(Number.NaN)).toBe("—");
+    expect(formatTimecode(4.137467, 2)).toBe("0:04.13");   // truncated, never later than the time
+    expect(formatTimecode(4.14, 2)).toBe("0:04.14");       // 413.99999999999994 in floats
+    expect(formatTimecode(3599.99, 1)).toBe("59:59.9");
+    expect(formatTimecode(3600.05, 1)).toBe("1:00:00.0");
     expect(formatDuration(0)).toBe("0 s");
     expect(formatDuration(0.13)).toBe("130 ms");
     expect(formatDuration(12.44)).toBe("12.4 s");

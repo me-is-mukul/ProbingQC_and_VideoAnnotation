@@ -1,0 +1,196 @@
+.status,
+.muted {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.error {
+  color: #ff9b9b;
+  font-size: 14px;
+}
+
+.tilesRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.lines {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lines li:not(.resetAll) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lines strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.chipReset {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chipReset:hover {
+  color: var(--text-1);
+  background: var(--surface-4);
+}
+
+.linkButton {
+  padding: 4px 6px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  color: var(--accent-hover);
+}
+
+.timelineCard {
+  padding: 28px 22px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.modeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.modeHint {
+  flex: 1 1 280px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.modeReason {
+  color: var(--text-3);
+}
+
+.request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+}
+
+.command {
+  display: grid;
+  gap: 12px;
+  padding: 20px 22px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  animation: rise-in var(--duration) var(--ease) both;
+}
+
+.commandHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.commandLabel {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.code {
+  margin: 0;
+  max-height: 260px;
+  padding: 14px 16px;
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: #050505;
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.files {
+  display: grid;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.fileButtons,
+.downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.notes {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.notes code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.parts {
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.parts > summary {
+  padding: 14px 18px;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.parts > :not(summary) {
+  margin: 0 18px 14px;
+}
+
+.partsTable {
+  max-height: 320px;
+  overflow: auto;
+}

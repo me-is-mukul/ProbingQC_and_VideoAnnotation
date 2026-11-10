@@ -246,6 +246,10 @@ cd tests && python           # REPL with the synthetic builders importable
 | 10b.12 | `results.json` has no server paths | any | `video.file` only, no `path` key | ✅ |
 | 10b.13 | URL job downloads to `source/` and reports byte progress | real URL | `progress` events with `unit: "bytes"`, total from `content-length` (or `null`) | — |
 | 10b.14 | Trimmed GoPro clip (`-ss 600 -c copy`) | 20 s clip | IMU timestamps start near 600 s (original STMP); the frontend marks the IMU charts as not linked to the video | — |
+| 10b.15 | Keyframe index (`keyframes.parse_packets`): GOP of 30, B-frame reordering, `N/A` pts, discard flag, all-intra, no packets | ffprobe lines | `[0, 30, ...]` in display order / skipped / `"all"` / `None` | ✅ |
+| 10b.16 | Keyframe index on a real file | GoPro HEVC | about one keyframe per second; the probe stage logs "N keyframes, every 30 frames (1.00 s)"; a 3.3 GB file scans in about 5 s | ✅ (synthetic) / — (GoPro) |
+| 10b.17 | `results.json` 1.1 fields | any job | `video.has_audio`, `video.has_b_frames` (GoPro 0, libx264 default > 0), `keyframes` | ✅ |
+| 10b.18 | Probe metric parity: the browser's port gives the Python numbers | `python tests/probe_parity.py` then `pytest tests/test_probe_parity.py` and the frontend `npm test` | fixture current; TypeScript equal to Python, exactly | ✅ |
 
 ## 11. End-to-end on real footage (manual, slow)
 

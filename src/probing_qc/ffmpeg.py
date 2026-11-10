@@ -32,6 +32,19 @@ def ffprobe_json(video: str | Path) -> dict:
     return json.loads(result.stdout)
 
 
+def ffprobe_video_packets(video: str | Path) -> str:
+    """``pts,flags`` of every packet of the first video stream, one CSV line each.
+
+    Demuxes the whole file (no decoding): about 5 s for a 3.3 GB GoPro file on an SSD.
+    """
+    result = subprocess.run(
+        [require_tool("ffprobe"), "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "packet=pts,flags", "-of", "csv=p=0", str(video)],
+        capture_output=True, text=True, encoding="utf-8", check=True,
+    )
+    return result.stdout
+
+
 def copy_stream(video: str | Path, stream_index: int) -> bytes:
     """Raw bytes of stream ``stream_index``, copied without re-encoding.
 

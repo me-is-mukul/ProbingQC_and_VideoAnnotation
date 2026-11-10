@@ -40,6 +40,12 @@
   --warning: #fab219;
   --critical: #d03b3b;
 
+  /* probing: what a probe command removes (red), and the region a line selects */
+  --cut-fill: rgba(208, 59, 59, 0.2);
+  --cut-extra: rgba(208, 59, 59, 0.45);
+  --probe-zone: rgba(245, 245, 247, 0.045);
+  --probe-line: rgba(245, 245, 247, 0.85);
+
   /* type */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI Variable Text",
     "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;

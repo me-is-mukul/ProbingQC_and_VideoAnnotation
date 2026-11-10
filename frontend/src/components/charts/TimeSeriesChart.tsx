@@ -8,6 +8,7 @@ import { formatTimecode } from "@/lib/shared/format";
 import {
   areaPath, extent, lastFiniteIndex, linearScale, linePath, nearestIndex, niceTicks, timeTicks, type Numeric,
 } from "./scales";
+import { ThresholdHandle } from "./ThresholdHandle";
 import styles from "./TimeSeriesChart.module.css";
 
 export interface ChartSeries {
@@ -16,6 +17,19 @@ export interface ChartSeries {
   color: string;
   values: ReadonlyArray<Numeric>;
 }
+
+/** A draggable horizontal line that selects the part of the chart below or above it. */
+export interface ChartThreshold {
+  /** null while unset: drawn dashed at the edge where it selects nothing. */
+  value: number | null;
+  direction: "below" | "above";
+  /** Accessible name of the handle. */
+  label: string;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}
+
+export type TimeBand = readonly [start: number, end: number];
 
 export interface TimeSeriesChartProps {
   /** Accessible name; the visible title belongs to the surrounding card. */
@@ -34,6 +48,9 @@ export interface TimeSeriesChartProps {
   currentTime?: number | null;
   /** Click / Enter on a point: seek the video there. */
   onSelectTime?: (seconds: number) => void;
+  threshold?: ChartThreshold;
+  /** Time ranges in seconds to mark in red (e.g. what a probe command removes). */
+  bands?: readonly TimeBand[];
 }
 
 const MARGIN = { top: 14, bottom: 28, left: 52 };
@@ -43,9 +60,11 @@ const MIN_LABEL_GAP = 14;
 /**
  * Line chart over video time. Thin 2px lines, hairline grid, one y-axis. Hover or arrow
  * keys move a crosshair that snaps to the nearest sample; the tooltip lists every series.
+ * Optional: a draggable threshold line, and red bands marking time ranges.
  */
 export function TimeSeriesChart({
   label, t, series, formatValue, formatTick = formatValue, yDomain, area = false, height = 180, currentTime, onSelectTime,
+  threshold, bands,
 }: TimeSeriesChartProps) {
   const [containerRef, width] = useElementWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
@@ -73,7 +92,7 @@ export function TimeSeriesChart({
     const sx = linearScale([x0, x1], [MARGIN.left, Math.max(MARGIN.left + 1, width - right)]);
     const sy = provisionalY;
     return {
-      sx, sy, plotBottom, yTicks: ticksInDomain, xTicks: timeTicks(x0, x1, Math.max(2, Math.floor(width / 110))),
+      sx, sy, plotBottom, yDomain: y.domain, yTicks: ticksInDomain, xTicks: timeTicks(x0, x1, Math.max(2, Math.floor(width / 110))),
       labelsFit, baseline: Math.max(y.domain[0], Math.min(0, y.domain[1])),
       paths: series.map((s) => ({
         id: s.id,
@@ -120,6 +139,27 @@ export function TimeSeriesChart({
   const playheadX = typeof currentTime === "number" && currentTime >= sx.domain[0] && currentTime <= sx.domain[1] ? sx(currentTime) : null;
   const tooltipLeft = hoverX !== null && hoverX > width - 200;
 
+  // Threshold: an unset line sits on the edge where it selects nothing.
+  const [yMin, yMax] = geometry.yDomain;
+  const thresholdValue = threshold
+    ? threshold.value === null
+      ? threshold.direction === "below" ? yMin : yMax
+      : Math.min(yMax, Math.max(yMin, threshold.value))
+    : null;
+  const thresholdY = thresholdValue === null ? null : sy(thresholdValue);
+  const plotRight = sx.range[1];
+  const valueAt = useCallback(
+    (clientY: number) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      return rect ? sy.invert(clientY - rect.top) : Number.NaN;
+    },
+    [containerRef, sy],
+  );
+
+  const visibleBands = (bands ?? [])
+    .map(([a, b]) => [Math.max(a, sx.domain[0]), Math.min(b, sx.domain[1])] as const)
+    .filter(([a, b]) => b > a);
+
   return (
     <div className={styles.root}>
       {series.length >= 2 && (
@@ -132,109 +172,158 @@ export function TimeSeriesChart({
           ))}
         </ul>
       )}
-      <div
-        ref={containerRef}
-        className={styles.plot}
-        tabIndex={0}
-        role="group"
-        aria-label={`${label}. Use the arrow keys to read values${onSelectTime ? " and Enter to jump the video there" : ""}.`}
-        onKeyDown={onKeyDown}
-        onFocus={() => setHover((h) => h ?? (t.length ? t.length - 1 : null))}
-        onBlur={() => setHover(null)}
-        data-clickable={Boolean(onSelectTime)}
-      >
-        <svg width={width} height={svgHeight} className={styles.svg} aria-hidden="true">
-          {geometry.yTicks.map((v) => (
-            <g key={v}>
-              <line x1={MARGIN.left} x2={sx.range[1]} y1={sy(v)} y2={sy(v)} className={v === geometry.baseline ? styles.baseline : styles.grid} />
-              <text x={MARGIN.left - 8} y={sy(v)} className={styles.yTick}>
-                {formatTick(v)}
-              </text>
-            </g>
-          ))}
-          {geometry.xTicks.map((v) => (
-            <text key={v} x={sx(v)} y={plotBottom + 18} className={styles.xTick}>
-              {formatTimecode(v)}
-            </text>
-          ))}
-
-          {geometry.paths.map((p, i) => (
-            <g key={p.id}>
-              {p.area && <path d={p.area} className={styles.area} style={{ fill: series[i]!.color }} />}
-              <path d={p.line} className={styles.line} style={{ stroke: series[i]!.color }} />
-            </g>
-          ))}
-
-          {/* end markers (and direct labels when they fit) */}
-          {series.map((s) => {
-            const i = lastFiniteIndex(s.values);
-            const x = t[i];
-            if (i < 0 || typeof x !== "number") return null;
-            const cy = sy(s.values[i] as number);
-            return (
-              <g key={s.id}>
-                <circle cx={sx(x)} cy={cy} r={4} className={styles.dot} style={{ fill: s.color }} />
-                {geometry.labelsFit && (
-                  <text x={sx(x) + 10} y={cy} className={styles.endLabel}>
-                    {s.label}
-                  </text>
-                )}
+      <div className={styles.plotWrap}>
+        <div
+          ref={containerRef}
+          className={styles.plot}
+          tabIndex={0}
+          role="group"
+          aria-label={`${label}. Use the arrow keys to read values${onSelectTime ? " and Enter to jump the video there" : ""}.`}
+          onKeyDown={onKeyDown}
+          onFocus={() => setHover((h) => h ?? (t.length ? t.length - 1 : null))}
+          onBlur={() => setHover(null)}
+          data-clickable={Boolean(onSelectTime)}
+        >
+          <svg width={width} height={svgHeight} className={styles.svg} aria-hidden="true">
+            {visibleBands.map(([a, b]) => (
+              <g key={`${a}-${b}`}>
+                <rect x={sx(a)} width={Math.max(1, sx(b) - sx(a))} y={MARGIN.top} height={height} className={styles.band} />
+                <rect x={sx(a)} width={Math.max(1, sx(b) - sx(a))} y={MARGIN.top - 4} height={3} className={styles.bandMark} />
               </g>
-            );
-          })}
+            ))}
 
-          {playheadX !== null && <line x1={playheadX} x2={playheadX} y1={MARGIN.top} y2={plotBottom} className={styles.playhead} />}
+            {geometry.yTicks.map((v) => (
+              <g key={v}>
+                <line x1={MARGIN.left} x2={plotRight} y1={sy(v)} y2={sy(v)} className={v === geometry.baseline ? styles.baseline : styles.grid} />
+                <text x={MARGIN.left - 8} y={sy(v)} className={styles.yTick}>
+                  {formatTick(v)}
+                </text>
+              </g>
+            ))}
+            {geometry.xTicks.map((v) => (
+              <text key={v} x={sx(v)} y={plotBottom + 18} className={styles.xTick}>
+                {formatTimecode(v)}
+              </text>
+            ))}
 
-          {hoverX !== null && hover !== null && (
-            <g>
-              <line x1={hoverX} x2={hoverX} y1={MARGIN.top} y2={plotBottom} className={styles.crosshair} />
-              {series.map((s) => {
-                const v = s.values[hover];
-                return typeof v === "number" ? (
-                  <circle key={s.id} cx={hoverX} cy={sy(v)} r={4} className={styles.dot} style={{ fill: s.color }} />
-                ) : null;
-              })}
-            </g>
-          )}
+            {threshold && thresholdY !== null && threshold.value !== null && (
+              <rect
+                x={MARGIN.left}
+                width={Math.max(0, plotRight - MARGIN.left)}
+                y={threshold.direction === "below" ? thresholdY : MARGIN.top}
+                height={Math.max(0, threshold.direction === "below" ? plotBottom - thresholdY : thresholdY - MARGIN.top)}
+                className={styles.zone}
+              />
+            )}
 
-          <rect
-            x={MARGIN.left}
-            y={MARGIN.top}
-            width={Math.max(0, sx.range[1] - MARGIN.left)}
-            height={height}
-            className={styles.hit}
-            onPointerMove={(e) => setHover(indexAt(e.clientX, e.currentTarget.ownerSVGElement!.getBoundingClientRect()))}
-            onPointerLeave={() => setHover(null)}
-            onClick={(e) => select(indexAt(e.clientX, e.currentTarget.ownerSVGElement!.getBoundingClientRect()))}
-          />
-        </svg>
+            {geometry.paths.map((p, i) => (
+              <g key={p.id}>
+                {p.area && <path d={p.area} className={styles.area} style={{ fill: series[i]!.color }} />}
+                <path d={p.line} className={styles.line} style={{ stroke: series[i]!.color }} />
+              </g>
+            ))}
 
-        {hoverX !== null && hover !== null && typeof hoverT === "number" && (
-          <div
-            className={styles.tooltip}
-            style={{ left: hoverX, top: MARGIN.top, transform: tooltipLeft ? "translateX(calc(-100% - 12px))" : "translateX(12px)" }}
-            aria-hidden="true"
-          >
-            <div className={styles.tooltipTime}>{formatTimecode(hoverT)}</div>
+            {/* end markers (and direct labels when they fit) */}
             {series.map((s) => {
-              const v = s.values[hover];
+              const i = lastFiniteIndex(s.values);
+              const x = t[i];
+              if (i < 0 || typeof x !== "number") return null;
+              const cy = sy(s.values[i] as number);
               return (
-                <div key={s.id} className={styles.tooltipRow}>
-                  <span className={styles.tooltipKey} style={{ background: s.color }} aria-hidden="true" />
-                  <strong>{typeof v === "number" ? formatValue(v) : "—"}</strong>
-                  <span>{s.label}</span>
-                </div>
+                <g key={s.id}>
+                  <circle cx={sx(x)} cy={cy} r={4} className={styles.dot} style={{ fill: s.color }} />
+                  {geometry.labelsFit && (
+                    <text x={sx(x) + 10} y={cy} className={styles.endLabel}>
+                      {s.label}
+                    </text>
+                  )}
+                </g>
               );
             })}
-          </div>
+
+            {threshold && thresholdY !== null && (
+              <line
+                x1={MARGIN.left}
+                x2={plotRight}
+                y1={thresholdY}
+                y2={thresholdY}
+                className={styles.threshold}
+                data-active={threshold.value !== null}
+              />
+            )}
+
+            {playheadX !== null && <line x1={playheadX} x2={playheadX} y1={MARGIN.top} y2={plotBottom} className={styles.playhead} />}
+
+            {hoverX !== null && hover !== null && (
+              <g>
+                <line x1={hoverX} x2={hoverX} y1={MARGIN.top} y2={plotBottom} className={styles.crosshair} />
+                {series.map((s) => {
+                  const v = s.values[hover];
+                  return typeof v === "number" ? (
+                    <circle key={s.id} cx={hoverX} cy={sy(v)} r={4} className={styles.dot} style={{ fill: s.color }} />
+                  ) : null;
+                })}
+              </g>
+            )}
+
+            <rect
+              x={MARGIN.left}
+              y={MARGIN.top}
+              width={Math.max(0, plotRight - MARGIN.left)}
+              height={height}
+              className={styles.hit}
+              onPointerMove={(e) => setHover(indexAt(e.clientX, e.currentTarget.ownerSVGElement!.getBoundingClientRect()))}
+              onPointerLeave={() => setHover(null)}
+              onClick={(e) => select(indexAt(e.clientX, e.currentTarget.ownerSVGElement!.getBoundingClientRect()))}
+            />
+          </svg>
+
+          {hoverX !== null && hover !== null && typeof hoverT === "number" && (
+            <div
+              className={styles.tooltip}
+              style={{ left: hoverX, top: MARGIN.top, transform: tooltipLeft ? "translateX(calc(-100% - 12px))" : "translateX(12px)" }}
+              aria-hidden="true"
+            >
+              <div className={styles.tooltipTime}>{formatTimecode(hoverT)}</div>
+              {series.map((s) => {
+                const v = s.values[hover];
+                return (
+                  <div key={s.id} className={styles.tooltipRow}>
+                    <span className={styles.tooltipKey} style={{ background: s.color }} aria-hidden="true" />
+                    <strong>{typeof v === "number" ? formatValue(v) : "—"}</strong>
+                    <span>{s.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <p className="visually-hidden" aria-live="polite">
+            {hover !== null && typeof hoverT === "number"
+              ? `${formatTimecode(hoverT)}: ${series
+                  .map((s) => `${s.label} ${typeof s.values[hover] === "number" ? formatValue(s.values[hover] as number) : "no data"}`)
+                  .join(", ")}`
+              : ""}
+          </p>
+        </div>
+
+        {threshold && thresholdY !== null && thresholdValue !== null && (
+          <ThresholdHandle
+            label={threshold.label}
+            y={Math.min(plotBottom - 12, Math.max(MARGIN.top + 12, thresholdY))}
+            right={plotRight - 4}
+            text={threshold.value === null ? "Probe" : `${threshold.direction === "below" ? "<" : ">"} ${formatValue(thresholdValue)}`}
+            valueText={threshold.value === null
+              ? "Not set. Use the arrow keys or drag to set it."
+              : `Selects frames ${threshold.direction} ${formatValue(thresholdValue)}`}
+            value={thresholdValue}
+            min={yMin}
+            max={yMax}
+            active={threshold.value !== null}
+            disabled={threshold.disabled}
+            valueAt={valueAt}
+            onChange={threshold.onChange}
+          />
         )}
-        <p className="visually-hidden" aria-live="polite">
-          {hover !== null && typeof hoverT === "number"
-            ? `${formatTimecode(hoverT)}: ${series
-                .map((s) => `${s.label} ${typeof s.values[hover] === "number" ? formatValue(s.values[hover] as number) : "no data"}`)
-                .join(", ")}`
-            : ""}
-        </p>
       </div>
     </div>
   );

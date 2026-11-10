@@ -69,7 +69,7 @@ describe("SourceForm", () => {
 
 describe("ResultsDashboard", () => {
   it("renders every section for a full result", () => {
-    render(<ResultsDashboard results={makeResults()} currentTime={null} onSeek={() => {}} onNewAnalysis={() => {}} />);
+    render(<ResultsDashboard results={makeResults()} jobId={null} currentTime={null} onSeek={() => {}} onNewAnalysis={() => {}} />);
     for (const name of ["Overview", "Image quality", "Hands", "Motion"]) {
       expect(screen.getByRole("heading", { name, level: 2 })).toBeTruthy();
     }
@@ -80,7 +80,7 @@ describe("ResultsDashboard", () => {
   it("omits Hands and Motion when they were not computed", () => {
     const r = makeResults({ imu: null });
     const report = { ...r.report, hands: undefined };
-    render(<ResultsDashboard results={{ ...r, report }} currentTime={null} onSeek={() => {}} onNewAnalysis={() => {}} />);
+    render(<ResultsDashboard results={{ ...r, report }} jobId={null} currentTime={null} onSeek={() => {}} onNewAnalysis={() => {}} />);
     expect(screen.queryByRole("heading", { name: "Hands" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Motion" })).toBeNull();
   });

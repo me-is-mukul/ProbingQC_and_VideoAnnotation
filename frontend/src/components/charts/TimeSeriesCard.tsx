@@ -9,15 +9,18 @@ import { TimeSeriesChart, type TimeSeriesChartProps } from "./TimeSeriesChart";
 export interface TimeSeriesCardProps extends Omit<TimeSeriesChartProps, "label"> {
   title: string;
   subtitle?: string;
+  /** Extra header controls (e.g. a probe line's direction switch). */
+  actions?: React.ReactNode;
 }
 
 /** A time-series chart in a card, with its table view. */
-export function TimeSeriesCard({ title, subtitle, ...chart }: TimeSeriesCardProps) {
+export function TimeSeriesCard({ title, subtitle, actions, ...chart }: TimeSeriesCardProps) {
   const rows = chart.t.map((t, i) => ({ i, t }));
   return (
     <ChartCard
       title={title}
       subtitle={subtitle}
+      actions={actions}
       table={() => (
         <DataTable
           caption={title}

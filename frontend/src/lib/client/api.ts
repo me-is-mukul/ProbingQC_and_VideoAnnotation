@@ -42,6 +42,8 @@ export const endpoints = {
   events: (id: string) => `/api/jobs/${encodeURIComponent(id)}/events`,
   results: (id: string) => `/api/jobs/${encodeURIComponent(id)}/results`,
   video: (id: string) => `/api/jobs/${encodeURIComponent(id)}/video`,
+  frames: (id: string) => `/api/jobs/${encodeURIComponent(id)}/frames`,
+  probeImu: (id: string) => `/api/jobs/${encodeURIComponent(id)}/probe/imu`,
   health: "/api/health",
 } as const;
 
@@ -72,6 +74,37 @@ export async function fetchResults(id: string, signal?: AbortSignal): Promise<QC
     throw new ApiClientError(200, "unsupported_results", `Results format ${results.schema_version} is not supported by this version of the app.`);
   }
   return results;
+}
+
+/** The per-frame QC table (CSV text). Immutable once the job has finished, so it is cached. */
+export async function fetchFramesCsv(id: string, signal?: AbortSignal): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(endpoints.frames(id), { signal, headers: { Accept: "text/csv" } });
+  } catch (error) {
+    if ((error as Error).name === "AbortError") throw error;
+    throw new ApiClientError(0, "network", "Can't reach the server. Check your connection and try again.");
+  }
+  if (!response.ok) throw errorFromBody(response.status, await response.json().catch(() => null));
+  return response.text();
+}
+
+/** The IMU CSV without the removed intervals (seconds), plus a `probed_time_s` column. */
+export async function fetchProbedImu(id: string, removed: ReadonlyArray<readonly [number, number]>, signal?: AbortSignal): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(endpoints.probeImu(id), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/csv" },
+      body: JSON.stringify({ removed }),
+      signal,
+    });
+  } catch (error) {
+    if ((error as Error).name === "AbortError") throw error;
+    throw new ApiClientError(0, "network", "Can't reach the server. Check your connection and try again.");
+  }
+  if (!response.ok) throw errorFromBody(response.status, await response.json().catch(() => null));
+  return response.blob();
 }
 
 export async function fetchHealth(): Promise<{ ok: boolean; problems: string[] }> {

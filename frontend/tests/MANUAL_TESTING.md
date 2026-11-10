@@ -70,10 +70,13 @@ curl -s -D - -o /dev/null -H "Range: bytes=0-99" $B/jobs/<job>/video            
 | 3.3 | `POST /api/jobs` with invalid JSON, unknown upload id, private URL, `source.kind: "path"` | 400 / 404 / 400 / 400 | ◐ |
 | 3.4 | Malformed job id in any `/api/jobs/:id/*` route | 404, never a filesystem error | ◐ |
 | 3.5 | `GET /results` while running | 409 | ✅ |
-| 3.6 | Results response headers | `Cache-Control: private, max-age=31536000, immutable`; gzip when the client accepts it | — |
+| 3.6 | Results and frames response headers | `Cache-Control: private, max-age=31536000, immutable`; `Content-Encoding: gzip` and `Vary: Accept-Encoding` when the client sends `Accept-Encoding: gzip`, plain otherwise | ✅ (helper) / — (route) |
 | 3.7 | 4-GB+ upload | memory flat (stream), progress bar moves, file intact (`sha256sum` matches) | — |
 | 3.8 | URL job against a 404 link | job `failed`, `error.stage = "download"`, message includes 404 | — |
 | 3.9 | URL job against an HTML page (not a video) | fails in `probe` with "No video stream" | — |
+| 3.10 | `GET /api/jobs/:id/frames` before success / after / for a job whose results list a path outside its folder | 409 / CSV / 404 | ✅ (service) |
+| 3.11 | `POST /api/jobs/:id/probe/imu` with `{"removed":[[2,5]]}` | CSV download `<stem>_imu_probed.csv`; no row with 2 ≤ timestamp_s < 5; `probed_time_s` = timestamp − removed time before it | ✅ (filter) / — (route) |
+| 3.12 | Same with `[[5,2]]`, `[]`, overlapping pairs, not JSON, a job without IMU, a trimmed clip | 400 / 400 / 400 / 400 / 404 / 409 | ◐ |
 
 ## 4. QC tab: input
 
@@ -120,18 +123,45 @@ curl -s -D - -o /dev/null -H "Range: bytes=0-99" $B/jobs/<job>/video            
 | 6.10 | "Download report" | saves `<stem>_qc.json` with no network request | — |
 | 6.11 | Very long video (81 min) | about 1500 points per chart; page stays responsive while the video plays | — |
 
-## 7. Layout, motion and accessibility
+## 7. Probing (lines, timeline, command)
+
+Use a short GoPro cut (setup above). The rule: removed = the intersection of the parts selected by every line that has been moved.
 
 | # | Objective / edge case | Expected | Auto |
 |---|---|---|---|
-| 7.1 | 390 px wide (phone) | no horizontal scroll (`scrollWidth == innerWidth`); tabs fit; charts inside their cards | — |
-| 7.2 | 1440 px and 2560 px | content capped at 1180 px, centred | — |
-| 7.3 | `prefers-reduced-motion: reduce` | no entrance animations, no pulsing dots | — |
-| 7.4 | Screen reader on a chart | group label explains the keys; values announced via the live region | ◐ |
-| 7.5 | Tabs: active pill slides; `aria-current="page"` on the active tab | ✓ | ✅ |
-| 7.6 | Annotation / Visualisations | "Under working" placeholder | ✅ |
-| 7.7 | Unknown route `/xyz` | 404 page with a link back to QC | — |
-| 7.8 | Response headers on pages | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` | — |
+| 7a.1 | Every image and hand chart has a line; the IMU charts don't | 4 image + 4 hand (one chart per hand) lines | ✅ |
+| 7a.2 | Before the frame table loads | lines greyed (not draggable); "Loading the frame table…" | ✅ (error case) / — |
+| 7a.3 | Untouched line | dashed, at the edge that selects nothing (bottom for Below, top for Above), pill says "Probe"; takes no part in the plan | ✅ |
+| 7a.4 | Drag a line with the mouse, a finger (touch) and the keyboard (↑/↓, Shift, Page Up/Down, Home/End) | value pill follows; the page doesn't scroll while dragging on touch | ✅ (keyboard) / — |
+| 7a.5 | One line: Luminance below the darkest dip | red bands appear on every chart at the same times; timeline shows the same red parts | ✅ |
+| 7a.6 | Two lines (the \|x\| < 1 and x² < 4 example: only time selected on both charts is red) | red = intersection, never the union | ✅ |
+| 7a.7 | Switch a chart to Above | the shaded region flips; the plan selects the part over the line | ✅ |
+| 7a.8 | Reset one line (card button or chip ×), Reset all | that chart stops taking part / nothing is removed | ✅ |
+| 7a.9 | Figures update while dragging | image and hand tiles and meters show the kept part, with the "Figures below are for the kept part" note; IMU figures stay whole-recording | ✅ |
+| 7a.10 | Line that removes everything | "Every frame would be removed" instead of a command | ✅ |
+| 7a.11 | Floating bar | appears once a line is set and the Probing section is off screen; its button opens the command | — |
+| 7a.12 | Exact command: paste into PowerShell, bash and cmd.exe next to the video | runs; output frame count = kept frames in the plan JSON; frames at each cut are the planned source frames | ✅ (cmd.exe, synthetic + GoPro) / — (bash) |
+| 7a.13 | Exact command with many cuts | graph moves to `<stem>_probe_filter.txt` (download it next to the video); needs ffmpeg 7.0+ | ✅ |
+| 7a.14 | Lossless command (save the `.ffconcat` next to the video) | output frames bit-identical to the source frames (framemd5); hatched timeline parts are removed too | ✅ |
+| 7a.15 | Lossless on a video with B-frames (phone footage) or on 1.0 results | option disabled with the reason | ✅ |
+| 7a.16 | File name with `$`, `!`, `%` or quotes | command uses `input.mp4` and says to rename the file | ✅ |
+| 7a.17 | Probed IMU CSV | rows in red parts removed; `probed_time_s` matches the cut video's timeline; button disabled for trimmed clips | ✅ (filter) / — |
+| 7a.18 | Plan JSON | lists lines, removed and kept frames and seconds; same totals as the tiles | ✅ |
+| 7a.19 | Analysis window shorter than the video (`--max-seconds`) | time outside it is hatched "Not analysed" and always kept | — |
+| 7a.20 | Long video (81 min, ~36k analysed frames) | dragging stays smooth; figures catch up within a moment | — |
+
+## 8. Layout, motion and accessibility
+
+| # | Objective / edge case | Expected | Auto |
+|---|---|---|---|
+| 8.1 | 390 px wide (phone) | no horizontal scroll (`scrollWidth == innerWidth`); tabs fit; charts inside their cards | — |
+| 8.2 | 1440 px and 2560 px | content capped at 1180 px, centred | — |
+| 8.3 | `prefers-reduced-motion: reduce` | no entrance animations, no pulsing dots | — |
+| 8.4 | Screen reader on a chart | group label explains the keys; values announced via the live region | ◐ |
+| 8.5 | Tabs: active pill slides; `aria-current="page"` on the active tab | ✓ | ✅ |
+| 8.6 | Annotation / Visualisations | "Under working" placeholder | ✅ |
+| 8.7 | Unknown route `/xyz` | 404 page with a link back to QC | — |
+| 8.8 | Response headers on pages | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` | — |
 
 ## Known limitations to re-check after changes
 

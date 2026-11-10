@@ -10,15 +10,18 @@
   animation: rise-in var(--duration) var(--ease) both;
 }
 
+/* controls sit beside the title, and wrap below it when the card is narrow */
 .header {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px 12px;
 }
 
 .titles {
   display: grid;
+  flex: 1 1 220px;
   gap: 2px;
   min-width: 0;
 }
@@ -26,6 +29,15 @@
 .subtitle {
   color: var(--text-3);
   font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .toggle {

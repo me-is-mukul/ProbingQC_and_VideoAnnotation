@@ -7,6 +7,8 @@ import styles from "./SegmentedControl.module.css";
 export interface SegmentOption<T extends string> {
   value: T;
   label: string;
+  /** Disable just this option (the reason belongs in nearby text). */
+  disabled?: boolean;
 }
 
 export interface SegmentedControlProps<T extends string> {
@@ -37,7 +39,7 @@ export function SegmentedControl<T extends string>({ label, options, value, onCh
             name={name}
             value={option.value}
             checked={option.value === value}
-            disabled={disabled}
+            disabled={disabled || option.disabled}
             onChange={() => onChange(option.value)}
           />
           {option.label}

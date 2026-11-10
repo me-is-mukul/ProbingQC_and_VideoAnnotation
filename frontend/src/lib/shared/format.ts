@@ -15,14 +15,21 @@ export function formatBytes(bytes: number | null | undefined): string {
   return i === 0 ? `${Math.round(value)} B` : `${value.toFixed(value < 10 ? 2 : 1)} ${units[i]}`;
 }
 
-/** Seconds as `m:ss` or `h:mm:ss` (video timeline style). */
-export function formatTimecode(seconds: number | null | undefined): string {
+/**
+ * Seconds as `m:ss` or `h:mm:ss` (video timeline style). With `fractionDigits`, the
+ * fraction is truncated, never rounded up, so a time never reads later than it is:
+ * formatTimecode(4.1374, 2) is "0:04.13".
+ */
+export function formatTimecode(seconds: number | null | undefined, fractionDigits = 0): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return DASH;
-  const total = Math.max(0, Math.floor(seconds));
+  const scale = 10 ** fractionDigits;
+  const units = Math.floor(Math.max(0, seconds) * scale + 1e-9);
+  const total = Math.floor(units / scale);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  const ss = String(s).padStart(2, "0");
+  const fraction = fractionDigits > 0 ? `.${String(units % scale).padStart(fractionDigits, "0")}` : "";
+  const ss = `${String(s).padStart(2, "0")}${fraction}`;
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 

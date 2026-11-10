@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { parseEventLine } from "@/lib/shared/events";
-import type { Job, JobStatus, PipelineEvent, PythonEvent, StoredEvent } from "@/lib/shared/types";
+import type { Job, JobStatus, PipelineEvent, PythonEvent, QCResults, StoredEvent } from "@/lib/shared/types";
 import { fileNameFromUrl, type ValidatedJobRequest } from "@/lib/shared/validation";
 
 import type { DataPaths } from "../data-paths";
@@ -109,6 +109,34 @@ export class JobService {
     const job = await this.require(id);
     if (job.status !== "succeeded") throw conflict(`Results are not available while the job is ${job.status}.`);
     return this.deps.paths.jobFile(id, "results.json");
+  }
+
+  /** results.json, parsed (only once the job has succeeded). */
+  async readResults(id: string): Promise<QCResults> {
+    const file = await this.resultsPath(id);
+    const text = await fs.readFile(file, "utf8").catch(() => {
+      throw notFound("Results");
+    });
+    return JSON.parse(text) as QCResults;
+  }
+
+  /**
+   * An output listed in results.json `files` (the per-frame table or the IMU CSV). The
+   * path comes from the job's own results and is still confined to the job folder.
+   */
+  async outputPath(id: string, key: "frames_csv" | "imu_csv"): Promise<string> {
+    const what = key === "imu_csv" ? "IMU data" : "Frame table";
+    const relative = (await this.readResults(id)).files?.[key];
+    if (typeof relative !== "string" || !relative) throw notFound(what);
+    let file: string;
+    try {
+      file = this.deps.paths.insideJob(id, relative);
+    } catch {
+      throw notFound(what);
+    }
+    const stat = await fs.stat(file).catch(() => null);
+    if (!stat?.isFile()) throw notFound(what);
+    return file;
   }
 
   /** The video file a job processed (uploaded file, or the downloaded copy). */

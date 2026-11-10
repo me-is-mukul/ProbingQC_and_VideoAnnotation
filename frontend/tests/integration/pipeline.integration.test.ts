@@ -85,7 +85,10 @@ describe.skipIf(!available)("Python pipeline integration", () => {
     expect(stages).toEqual(["download:skip", "probe:start", "probe:done", "imu:skip", "qc:start", "qc:done", "results:start", "results:done"]);
 
     const results = JSON.parse(await fsp.readFile(await service.resultsPath(job.id), "utf8")) as QCResults;
-    expect(results.schema_version).toBe("1.0");
+    expect(results.schema_version).toBe("1.1");
+    expect(Array.isArray(results.keyframes) && results.keyframes[0]).toBe(0); // first frame is a keyframe
+    expect(results.video.has_audio).toBe(false);
+    expect(results.video.has_b_frames).toBeGreaterThan(0);                    // libx264 defaults
     expect(results.video.codec).toBe("h264");
     expect(results.report.sampling.frames_analyzed).toBe(10);
     expect(results.frames_preview.t).toHaveLength(results.frames_preview.points);

@@ -5,7 +5,7 @@ Quality-control pipeline for GoPro probing videos. It has two stages:
 - **IMU extraction:** accelerometer and gyroscope data from the GPMF telemetry track, written to CSV and sanity-checked.
 - **Video QC:** technical quality and hand-tracking metrics for each video, written to JSON.
 
-Both stages can run on their own from the command line, or together as one **job** (`probing-job`) that streams machine-readable progress. The **web interface** in [`frontend/`](frontend/README.md) uses jobs: upload a video or paste a link, watch the pipeline in an on-screen terminal, and explore the results as charts.
+Both stages can run on their own from the command line, or together as one **job** (`probing-job`) that streams machine-readable progress. The **web interface** in [`frontend/`](frontend/README.md) uses jobs: upload a video or paste a link, watch the pipeline in an on-screen terminal, and explore the results as charts. Its **probing** tool turns lines drawn on those charts into an ffmpeg command that cuts the selected time out of the video, plus a matching cut of the IMU data.
 
 ## Layout
 
@@ -17,6 +17,7 @@ Both stages can run on their own from the command line, or together as one **job
 │   ├── events.py                   #   JSON Lines progress events (the contract with the frontend)
 │   ├── preview.py                  #   downsampling long tables into chart series
 │   ├── job.py                      #   end-to-end job: download → probe → IMU → QC → results.json
+│   ├── keyframes.py                #   keyframe index (lets the web UI write lossless cut commands)
 │   ├── imu/                        #   stage 1: GPMF telemetry -> IMU table
 │   │   ├── telemetry.py            #     find and copy the GPMF track
 │   │   ├── gpmf.py                 #     KLV byte parser
@@ -93,4 +94,5 @@ More documentation:
 - Keep new logic pure where possible, and put I/O in a separate small function.
 - Put new QC metrics in a `FrameAnalyzer` (see [docs/qc.md](docs/qc.md#extending)), and put their thresholds in `qc/config.py`, with a rule in `validation_errors`.
 - Add a test in `tests/` and a line in `tests/MANUAL_TESTING.md` for any change. Run `pytest` before you commit.
+- Changing an image or hand metric? The web UI recomputes them in TypeScript for probing. Run `python tests/probe_parity.py` to refresh the shared fixture, then `npm test` in `frontend/` (see [frontend/docs/ARCHITECTURE.md](frontend/docs/ARCHITECTURE.md#probing)).
 - Commit notebooks with their outputs cleared. Never commit videos, models or generated data.

@@ -24,7 +24,7 @@ Exit codes: `0` success, `1` a stage failed (an `error` event names the stage), 
 | Stage | Does | Skipped when |
 |---|---|---|
 | `download` | Streams the URL to `source/` via a `.part` file | The source is a local file |
-| `probe` | ffprobe container metadata | never |
+| `probe` | ffprobe container metadata, plus the keyframe index: one packet scan (no decoding), about 5 s for a 3.3 GB GoPro file. A failed scan is logged as a warning and never fails the job. | never |
 | `imu` | Copies GPMF once, decodes ACCL and GYRO, writes the CSV, runs the checks | `--no-imu`, or no GPMF track |
 | `qc` | One FFmpeg decode pass with the image and hand analyzers. Reuses the GPMF bytes from `imu` for orientation, so FFmpeg doesn't run a second time | never |
 | `results` | Writes the compact `results.json` | never |
@@ -63,15 +63,18 @@ Rules for changing the contract:
 - Non-finite numbers are written as `null`, never as `NaN`.
 - `frontend/tests/integration/pipeline.integration.test.ts` runs the real CLI and asserts that every stdout line parses. Run it after any change here.
 
-## `results.json` (`RESULTS_SCHEMA_VERSION` "1.0")
+## `results.json` (`RESULTS_SCHEMA_VERSION` "1.1")
 
 | Key | Content |
 |---|---|
 | `source`, `options`, `created_at` | What was processed and how |
-| `video` | `VideoInfo` without server paths, plus `display_width` / `display_height` |
+| `video` | `VideoInfo` without server paths, plus `display_width` / `display_height`. Since 1.1 it also has `has_audio` (any audio stream) and `has_b_frames` (ffprobe's reorder depth; 0 means frames are stored in display order). |
+| `keyframes` | Since 1.1. Frame numbers of the video's keyframes in presentation order (the numbering of the `frame` column in the frames CSV), `"all"` for all-intra video, or `null` when the scan failed. The web UI's lossless probing command needs it. |
 | `report` | The full QC report (see [qc.md](qc.md)) |
 | `imu` | `null`, or `summary`, `units`, `checks[]`, `preview`, `file` |
 | `frames_preview` | Downsampled per-frame metrics |
 | `files` | Paths of the full outputs, relative to the job folder |
+
+Version history: 1.0 → 1.1 added `video.has_audio`, `video.has_b_frames` and `keyframes` (additive, so a 1.0 reader still works; the web UI disables lossless probing for 1.0 results).
 
 A *preview* is columnar: `{"points", "bucket_size", "t": [...], "<column>": [...]}`. Each point is the mean of `bucket_size` consecutive samples, so booleans such as `left` become the share of frames, from 0 to 1. A bucket that is all NaN becomes `null`. The code is in `src/probing_qc/preview.py`. An 81-minute video produces about 300 KB instead of more than 60 MB of CSV.

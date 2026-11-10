@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 
+import { compressedResponse } from "@/lib/server/compress";
 import { getServices } from "@/lib/server/container";
 import { handle, notFound } from "@/lib/server/http";
 import { isId } from "@/lib/shared/validation";
@@ -11,10 +12,10 @@ type Context = { params: Promise<{ id: string }> };
 
 /**
  * `GET /api/jobs/:id/results` — the compact, chart-ready results.json (~100-300 KB,
- * versus tens of MB of raw CSV). Immutable once written, so the browser caches it and a
- * revisit costs no egress; the response is also compressed by the platform.
+ * versus tens of MB of raw CSV), gzip-encoded when the client accepts it. Immutable once
+ * written, so the browser caches it and a revisit costs no egress.
  */
-export const GET = handle(async (_request: Request, context: Context) => {
+export const GET = handle(async (request: Request, context: Context) => {
   const { id } = await context.params;
   if (!isId(id)) throw notFound("Job");
   const { jobs } = await getServices();
@@ -22,7 +23,7 @@ export const GET = handle(async (_request: Request, context: Context) => {
   const body = await fs.readFile(file, "utf8").catch(() => {
     throw notFound("Results");
   });
-  return new Response(body, {
+  return compressedResponse(request, body, {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "private, max-age=31536000, immutable",

@@ -26,6 +26,16 @@ def test_parse_probe_fallbacks():
     assert info.video_bitrate is None
 
 
+def test_parse_probe_audio_and_b_frames():
+    info = parse_probe(probe_json(), "x.mp4", 0)
+    assert info.has_audio is True and info.has_b_frames == 0      # GoPro: no B-frames
+    info = parse_probe(probe_json(has_b_frames=2), "x.mp4", 0)
+    assert info.has_b_frames == 2
+    silent = probe_json()
+    silent["streams"] = [s for s in silent["streams"] if s["codec_type"] != "audio"]
+    assert parse_probe(silent, "x.mp4", 0).has_audio is False
+
+
 def test_parse_probe_rejects_audio_only():
     with pytest.raises(ValueError):
         parse_probe({"streams": [{"codec_type": "audio"}], "format": {}}, "a.m4a", 0)
