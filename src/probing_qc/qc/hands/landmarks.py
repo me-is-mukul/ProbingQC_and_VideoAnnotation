@@ -41,8 +41,9 @@ def assign_sides(hands: list[Hand]) -> FrameHands:
     """Resolve detections to at most one left and one right hand.
 
     Labels are trusted when they differ. When two hands share a label, the one
-    further left in the image is taken as the left hand. Detections beyond the
-    first two are ignored.
+    further left in the image is taken as the left hand (true for egocentric
+    footage, where the camera faces the same way as the wearer). Detections
+    beyond the first two are ignored.
     """
     if not hands:
         return FrameHands()
@@ -53,6 +54,17 @@ def assign_sides(hands: list[Hand]) -> FrameHands:
     if a.side != b.side:
         return FrameHands(**{a.side: a, b.side: b})
     return FrameHands(left=relabel(a, "left"), right=relabel(b, "right"))
+
+
+def palm_size(landmarks: np.ndarray, aspect: float) -> float:
+    """Wrist-to-middle-finger-MCP length in the image, as a fraction of the frame width.
+
+    ``landmarks`` are normalised image coordinates; ``aspect`` is height / width.
+    The wearer's own hands are close to the camera, so they are large; a small
+    hand high in the frame is usually someone else's.
+    """
+    dx, dy = landmarks[MIDDLE_MCP, :2] - landmarks[WRIST, :2]
+    return float(np.hypot(dx, dy * aspect))
 
 
 def unmirror(landmarks: np.ndarray, world_landmarks: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

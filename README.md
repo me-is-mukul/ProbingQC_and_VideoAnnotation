@@ -30,7 +30,7 @@ Both stages can run on their own from the command line, or together as one **job
 │   │   ├── frames.py               #     single-pass decoding, every Nth frame
 │   │   ├── image_metrics.py        #     luminance, sharpness, blockiness, colour cast
 │   │   ├── stats.py                #     summaries, boolean runs, circular mean
-│   │   ├── hands/                  #     landmarks, MediaPipe detector, grasp heuristic, metrics
+│   │   ├── hands/                  #     landmarks, MediaPipe detector, grasp heuristic, metrics, HOI
 │   │   ├── analyzers/              #     per-frame analyzer plug-ins (base, image, hands)
 │   │   ├── orientation.py          #     camera tilt from the IMU
 │   │   ├── models.py               #     pinned, checksum-verified model download

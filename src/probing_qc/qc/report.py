@@ -14,7 +14,9 @@ from ..ffmpeg import ffmpeg_version
 from .config import SamplingConfig
 from .metadata import VideoInfo
 
-SCHEMA_VERSION = "1.1"
+# 1.2: hands.hoi, and left/right now name the wearer's hands correctly (1.1 and older
+#      reports from MediaPipe Tasks have them swapped; see hands/detector.py).
+SCHEMA_VERSION = "1.2"
 
 
 def _kbps(bits_per_s: int | None) -> float | None:

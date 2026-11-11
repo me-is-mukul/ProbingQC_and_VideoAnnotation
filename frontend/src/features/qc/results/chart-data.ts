@@ -67,7 +67,7 @@ function handCharts(p: SeriesPreview): ChartData[] {
   // (Long videos are already bucketed server-side, so the window collapses to 1 there.)
   const window = windowFor(p.t, HAND_SMOOTHING_S);
   const share = (key: string) => rollingMean(scale(column(p, key), 100), window);
-  // Left is always slot 1 and right slot 2, on every hand chart (colour follows the hand).
+  // Colour follows the hand on every hand chart: left the first series colour, right the second.
   const hands = [["left", "Left hand", 0], ["right", "Right hand", 1]] as const;
   const visibility = hands.map(([key, label, slot]): ChartData => ({
     id: `${key}_visible`, section: "hands", probe: true, t: p.t,

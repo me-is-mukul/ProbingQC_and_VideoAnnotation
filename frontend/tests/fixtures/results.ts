@@ -1,5 +1,6 @@
 /**
- * Deterministic results.json fixture (shape of src/probing_qc/job.py RESULTS_SCHEMA_VERSION 1.0).
+ * Deterministic results.json fixture (src/probing_qc/job.py RESULTS_SCHEMA_VERSION 1.0 shape,
+ * which 1.1 extends; the embedded report is schema 1.2).
  * Override any part per test: makeResults({ imu: null }).
  */
 import type { Distribution, HandMetrics, QCResults, SeriesPreview } from "@/lib/shared/types";
@@ -29,7 +30,27 @@ export const handMetrics = (): HandMetrics => ({
     left: { tracking_losses: 1, grasp_count: 4, grasp_duration: { total_s: 5.34, mean_s: 1.33, median_s: 1.2, max_s: 2.27 } },
     right: { tracking_losses: 1, grasp_count: 1, grasp_duration: { total_s: 0.93, mean_s: 0.93, median_s: 0.93, max_s: 0.93 } },
   },
+  // 74 frames, dt = 4 / 29.97: 72 with a hand (66 each), contact left 40, right 7, both 1
+  hoi: {
+    bimanual_pct: 1.35,
+    idle_hands_pct: 35.14,
+    contact_while_visible_pct: 63.89,
+    grasps_per_min: 30.37,
+    longest_no_contact_s: 2.4,
+    laterality_index: -0.702,
+    per_hand: {
+      left: { contact_pct: 54.05, contact_while_visible_pct: 60.61 },
+      right: { contact_pct: 9.46, contact_while_visible_pct: 10.61 },
+    },
+  },
 });
+
+/** Hand metrics as reports before schema 1.2 carry them: no `hoi` block. */
+export function legacyHandMetrics(): HandMetrics {
+  const h = handMetrics();
+  delete h.hoi;
+  return h;
+}
 
 export function makeResults(overrides: Partial<QCResults> = {}): QCResults {
   const base: QCResults = {
@@ -43,7 +64,7 @@ export function makeResults(overrides: Partial<QCResults> = {}): QCResults {
       pix_fmt: "yuvj420p", video_bitrate: 13_988_015, total_bitrate: 14_244_449, rotation_deg: 0, has_gpmf: true,
     },
     report: {
-      schema_version: "1.1",
+      schema_version: "1.2",
       video: { file: "GX010140.MP4", size_bytes: 8_669_285_837, frame_count: 145_920, has_gpmf: true },
       sampling: { frame_stride: 4, analysis_fps: 7.493, start_s: 600, max_seconds: 10, frames_analyzed: 74 },
       technical: {

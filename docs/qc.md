@@ -48,7 +48,7 @@ orientation.gravity_stats (GPMF accelerometer) ──► technical.orientation.i
 | `metadata.py` | `parse_probe`, `parse_fps`, `parse_rotation` | `probe_video` calls ffprobe |
 | `frames.py` | `expected_frame_count`, `decode_command` | `FrameSampler` runs ffmpeg in threads |
 | `image_metrics.py`, `stats.py` | yes | arrays in, numbers out |
-| `hands/landmarks.py`, `hands/interaction.py`, `hands/metrics.py` | yes | no MediaPipe import |
+| `hands/landmarks.py`, `hands/interaction.py`, `hands/metrics.py`, `hands/hoi.py` | yes | no MediaPipe import |
 | `hands/detector.py` | no | MediaPipe HandLandmarker, downloads the model |
 | `analyzers/` | `hand_row` | `HandAnalyzer(detector=...)` accepts a stub for testing |
 | `orientation.py` | `gravity_stats_from_samples`, `window_means` | `gravity_stats` reads the GPMF |
@@ -60,9 +60,14 @@ orientation.gravity_stats (GPMF accelerometer) ──► technical.orientation.i
 - **Timestamps:** every frame is stamped `index / fps`. GoPro footage is constant frame rate.
 - **Overlap:** a prefetch thread lets decoding run while the previous frame is analysed.
 
-## Report schema (`schema_version` 1.1)
+## Report schema (`schema_version` 1.2)
 
-Changes from 1.0 are additive only: `config.orientation.window_s`, plus the environment versions in `runtime`.
+Version history:
+
+- **1.1** (additive): `config.orientation.window_s`, plus the environment versions in `runtime`.
+- **1.2:**
+  - **Handedness fix.** In 1.1 and older reports, **left and right are swapped**. The pipeline mirrored every frame before hand detection, as the legacy MediaPipe API needed. MediaPipe Tasks, which the pipeline uses, labels an unmirrored frame correctly, so the flip turned every label around. Every per-hand figure and per-frame column in those reports describes the other hand. Re-run them; the web UI shows a warning on such reports.
+  - **Additions:** the `hands.hoi` block, and the per-frame columns `*_wrist_x`, `*_wrist_y` and `*_size`.
 
 ### `technical`
 
@@ -107,7 +112,37 @@ All percentages are over analysed frames. "Left" and "right" mean the wearer's h
 | `grasp_duration` | s | `total_s, mean_s, median_s, max_s` over episodes |
 | `per_hand.{left,right}` | — | `tracking_losses`, `grasp_count` and `grasp_duration` per hand |
 
-**Contact cleaning:** per hand, gaps shorter than `grasp_merge_gap_s` are bridged. Episodes shorter than `grasp_min_duration_s` are dropped.
+**Contact cleaning:** per hand, gaps shorter than `grasp_merge_gap_s` are bridged. Episodes shorter than `grasp_min_duration_s` are dropped. "Contact" below always means this cleaned contact.
+
+#### `hands.hoi`: hand-object interaction (schema 1.2+)
+
+Computed by `hands/hoi.py` from the same per-frame flags. The web UI recomputes them for a probed video (`frontend/src/features/qc/probe/hoi.ts`, kept exact by `tests/probe_parity.py`).
+
+| Field | Unit | Definition |
+|---|---|---|
+| `bimanual_pct` | % | both hands in contact at once, of analysed time |
+| `idle_hands_pct` | % | at least one hand visible but neither in contact, of analysed time |
+| `contact_while_visible_pct` | % | of the time at least one hand is visible, the share with a hand in contact. `null` when no hand is ever seen. Unlike `HOI_pct`, it does not drop when the hands leave the frame. |
+| `grasps_per_min` | 1/min | `grasp_count` per minute of analysed time. `null` for no frames. |
+| `longest_no_contact_s` | s | longest stretch with no contact at all |
+| `laterality_index` | −1 … 1 | (R − L) / (R + L) over contact frames: +1 is right hand only, −1 left only, 0 balanced. `null` without contact. |
+| `per_hand.{left,right}.contact_pct` | % | that hand in contact, of analysed time |
+| `per_hand.{left,right}.contact_while_visible_pct` | % | that hand in contact, of the time it is visible. `null` when it is never seen. |
+
+#### Per-frame hand columns (`--frames-csv`)
+
+For each of `left` and `right`:
+
+| Column | Meaning |
+|---|---|
+| `left` | presence |
+| `left_score` | handedness confidence |
+| `left_curl`, `left_pinch` | hand shape, for calibrating the grasp thresholds |
+| `left_contact` | raw (uncleaned) contact |
+| `left_wrist_x`, `left_wrist_y` (1.2+) | wrist position, normalised 0–1 in the displayed frame |
+| `left_size` (1.2+) | wrist-to-middle-knuckle length as a fraction of the frame width |
+
+The numeric columns are empty when the hand is not detected.
 
 ### `sampling`, `video`, `config`, `runtime`
 
@@ -129,7 +164,7 @@ All thresholds live in `src/probing_qc/qc/config.py`. Print them with `--dump-co
 | `image.cast_factor` | 1.5 | literature default |
 | `hands.input_width` | 1280 | frames are downscaled before detection |
 | `hands.min_*_confidence` | 0.5 | MediaPipe defaults |
-| `hands.mirrored_input` | false | false for head- or chest-mounted footage |
+| `hands.mirrored_input` | false | true only for horizontally mirrored (selfie-view) footage. Such frames are unmirrored before detection, and coordinates are reported in the original frame. |
 | `hands.min_loss_s` | 0.5 | |
 | `hands.grasp_curl_ratio` / `grasp_pinch_ratio` | 1.3 / 0.35 | **uncalibrated** |
 | `hands.grasp_merge_gap_s` / `grasp_min_duration_s` | 0.25 / 0.3 | |
@@ -141,9 +176,17 @@ All thresholds live in `src/probing_qc/qc/config.py`. Print them with `--dump-co
 1. **HOI and grasp detection is a heuristic.** `LandmarkGraspDetector` marks a hand as grasping when the fingers are curled (`curl < 1.3`) or the thumb and index finger pinch (`pinch < 0.35`). It cannot see objects, so an empty fist counts. On the sample clips it reports `HOI_pct` of about 80%. Treat these metrics as provisional until either:
    - the thresholds are calibrated on hand-labelled clips (`--frames-csv` writes `*_curl` and `*_pinch` per frame for this), or
    - a learned contact model replaces the heuristic (next section).
-2. **Handedness:** MediaPipe labels hands assuming a mirrored selfie image. Frames are flipped before detection (`mirrored_input: false`). When both detections get the same label, the hand further left in the image is taken as the left hand. Labels can still swap when the hands cross.
-3. **Thresholds** marked "uncalibrated" need a labelled reference set: good and bad clips per metric.
-4. **IMU axes:** `up_unit_xyz` is in the GoPro IMU frame after `ORIN` reordering (see [extraction.md](extraction.md)). The mapping to image axes isn't asserted, so the report gives no pitch/roll values yet.
+2. **Handedness:**
+   - **How hands are labelled.** MediaPipe Tasks labels each hand from the subject's point of view on an unmirrored image. Frames are therefore passed through as they are, and flipped only when `mirrored_input` is true. `tests/test_hand_detector.py` checks this on a real head-mounted frame (`tests/fixtures/egocentric_hands.jpg`).
+   - **Verification on real footage.** On 60 s of GX010191, the left wrist was left of the right wrist in all 256 frames where both hands were detected.
+   - **Same-label detections.** When both detections get the same label, the hand further left in the image is taken as the left hand. Labels can still swap when the hands cross.
+   - **Reports before schema 1.2** have every left/right swapped (see the version history above).
+3. **Other people's hands:** the detector can't tell the wearer's hands from a co-worker's.
+   - **How often.** In 160 frames sampled across GX010191 (factory floor), about 4% of detections were a bystander's hand. They appear mostly when the wearer looks up and their own hands are out of view. They are counted as the wearer's, which inflates visibility.
+   - **What they look like.** They are small (`*_size` below about 0.045) and high in the frame (`*_wrist_y` below about 0.5). Some of the wearer's own hands are just as small when reaching forward, so no filter is applied yet.
+   - **Calibrating a filter.** The `*_size` and `*_wrist_*` columns exist so a filter can be calibrated on labelled frames.
+4. **Thresholds** marked "uncalibrated" need a labelled reference set: good and bad clips per metric.
+5. **IMU axes:** `up_unit_xyz` is in the GoPro IMU frame after `ORIN` reordering (see [extraction.md](extraction.md)). The mapping to image axes isn't asserted, so the report gives no pitch/roll values yet.
 
 ## Performance
 
@@ -177,7 +220,7 @@ class MotionBlurAnalyzer(FrameAnalyzer):
 
 Register it in `build_analyzers()` (`analyzers/__init__.py`). Its summary is merged into `report[section]`. You can also pass a custom list straight to `run_qc(video, cfg, analyzers=[...])`.
 
-**Better hand-object contact:** implement `InteractionDetector.in_contact(hand, frame) -> bool` (see `hands/interaction.py`), for example with the 100DOH hand-object detector or EgoHOS. Pass it to `HandAnalyzer(cfg.hands, interaction=MyDetector())`. All the `HOI_pct` and grasp metrics then use it unchanged.
+**Better hand-object contact:** implement `InteractionDetector.in_contact(hand, frame) -> bool` (see `hands/interaction.py`), for example with the 100DOH hand-object detector or EgoHOS. Pass it to `HandAnalyzer(cfg.hands, interaction=MyDetector())`. `HOI_pct`, the grasp metrics and the `hoi` block then use it unchanged.
 
 **Different hand detector:** anything with `detect(rgb, timestamp_ms) -> FrameHands` and `close()` can be passed as `HandAnalyzer(cfg.hands, detector=...)`. The tests use a scripted stub this way (`tests/test_qc_analyzers.py`).
 

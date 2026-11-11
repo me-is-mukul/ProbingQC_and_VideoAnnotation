@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { makeResults } from "../../../tests/fixtures/results";
+import { legacyHandMetrics, makeResults } from "../../../tests/fixtures/results";
 import { PipelineTerminal } from "./components/PipelineTerminal";
 import { SourceForm } from "./components/SourceForm";
 import { StageTracker } from "./components/StageTracker";
@@ -75,6 +75,23 @@ describe("ResultsDashboard", () => {
     }
     expect(screen.getByText("No decode errors")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "Table" }).length).toBeGreaterThanOrEqual(8);
+  });
+
+  it("groups the hand figures into tracking and interaction", () => {
+    render(<ResultsDashboard results={makeResults()} jobId={null} currentTime={null} onSeek={() => {}} onNewAnalysis={() => {}} />);
+    expect(screen.getByRole("heading", { name: "Tracking", level: 3 })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Hand-object interaction", level: 3 })).toBeTruthy();
+    expect(screen.getByRole("meter", { name: "Two-handed contact" })).toBeTruthy();
+    expect(screen.getByText("Dominant hand")).toBeTruthy();
+    expect(screen.queryByText("Left and right are swapped in this report")).toBeNull();
+  });
+
+  it("warns that left and right are swapped in reports made before schema 1.2", () => {
+    const r = makeResults();
+    const report = { ...r.report, schema_version: "1.1", hands: legacyHandMetrics() };
+    render(<ResultsDashboard results={{ ...r, report }} jobId={null} currentTime={null} onSeek={() => {}} onNewAnalysis={() => {}} />);
+    expect(screen.getByRole("note", { name: "Left and right are swapped in this report" }).textContent).toMatch(/Run the video again/);
+    expect(screen.queryByRole("meter", { name: "Two-handed contact" })).toBeNull(); // no HOI block before 1.2
   });
 
   it("omits Hands and Motion when they were not computed", () => {

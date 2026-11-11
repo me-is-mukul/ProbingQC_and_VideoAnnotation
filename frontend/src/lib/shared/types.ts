@@ -3,7 +3,8 @@
  *
  * Pipeline event and results shapes mirror the Python side:
  *   - events:  src/probing_qc/events.py   (EVENT_VERSION 1)
- *   - results: src/probing_qc/job.py      (RESULTS_SCHEMA_VERSION "1.0")
+ *   - results: src/probing_qc/job.py      (RESULTS_SCHEMA_VERSION "1.1")
+ *   - report:  src/probing_qc/qc/report.py (SCHEMA_VERSION "1.2"; older reports are still read)
  */
 
 // ---------------------------------------------------------------- pipeline stages
@@ -139,6 +140,23 @@ export interface GraspDuration {
   max_s: number | null;
 }
 
+/** `hands.hoi`: hand-object interaction breakdown (report schema 1.2+). */
+export interface HoiMetrics {
+  /** Both hands in contact, % of analysed time. */
+  bimanual_pct: number;
+  /** A hand is visible but neither is in contact, % of analysed time. */
+  idle_hands_pct: number;
+  /** Of the time a hand is visible, % with a hand in contact (null: no hand seen). */
+  contact_while_visible_pct: number | null;
+  /** Contact episodes per minute of analysed time (null: no frames). */
+  grasps_per_min: number | null;
+  /** Longest stretch without any contact, seconds. */
+  longest_no_contact_s: number;
+  /** (R − L) / (R + L) over contact time: +1 right hand only, −1 left only (null: no contact). */
+  laterality_index: number | null;
+  per_hand: Record<"left" | "right", { contact_pct: number; contact_while_visible_pct: number | null }>;
+}
+
 export interface HandMetrics {
   either_hand_pct: number;
   both_hands_pct: number;
@@ -151,6 +169,8 @@ export interface HandMetrics {
   grasp_duration: GraspDuration;
   longest_hand_gap: number;
   per_hand: Record<"left" | "right", { tracking_losses: number; grasp_count: number; grasp_duration: GraspDuration }>;
+  /** Absent in reports before schema 1.2. */
+  hoi?: HoiMetrics;
 }
 
 export interface TechnicalReport {

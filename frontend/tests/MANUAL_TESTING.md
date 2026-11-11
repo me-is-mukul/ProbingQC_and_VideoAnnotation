@@ -50,6 +50,9 @@ npm run build && npm start                  # test the production build, not jus
 | 2.11 | Upload: header `Content-Length` over the limit; body over the limit; empty; client abort | 413 / 413 / 400 / 499; no files left in `.data/uploads` | ✅ |
 | 2.12 | SSE: replay from `Last-Event-ID`; already finished; live with duplicate delivery; client disconnect; heartbeat | exact sequence; closes after the terminal event; unsubscribes | ✅ |
 | 2.13 | Two browser tabs watching one job | both receive every event; closing one doesn't affect the other | — |
+| 2.14 | A second server started on the same `DATA_DIR` while the first runs a job | second logs "another server (pid …) is using …" and leaves the job alone; the job finishes normally on the first | ✅ (lock) / — |
+| 2.15 | Start a server right after the previous one was killed (Task Manager, `taskkill /F`) | takes the stale lock at once (its process is gone); interrupted jobs are marked failed as in 2.10. A lock not refreshed for 30 s is stale even if its pid was reused. | ✅ (lock) / — |
+| 2.16 | Cancel a URL job while it downloads | job `cancelled`; no `source/*.part` left | ✅ |
 
 ## 3. API (production build, `curl`)
 
@@ -122,6 +125,9 @@ curl -s -D - -o /dev/null -H "Range: bytes=0-99" $B/jobs/<job>/video            
 | 6.9 | Hands: 0/1 per-frame flags | 1 s rolling share, readable trend; legend for two series; end labels only when they don't collide | ✅ (selector) |
 | 6.10 | "Download report" | saves `<stem>_qc.json` with no network request | — |
 | 6.11 | Very long video (81 min) | about 1500 points per chart; page stays responsive while the video plays | — |
+| 6.12 | Hands: grouped figures | "Tracking" (visibility per hand, losses, gaps) and "Hand-object interaction" (HOI, contact while visible, two-handed, idle, grasp rate, dominant hand, per-hand contact, longest without contact) | ✅ |
+| 6.13 | Report made before schema 1.2 (e.g. an old job) | "Left and right are swapped in this report" notice; the interaction block shows only HOI, grasps and mean grasp, also while lines are set | ✅ |
+| 6.14 | Head-mounted footage, new job | the "Left hand" charts follow the hand on the left of the video | — |
 
 ## 7. Probing (lines, timeline, command)
 

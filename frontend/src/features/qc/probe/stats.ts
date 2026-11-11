@@ -32,9 +32,14 @@ export function summarize(values: ArrayLike<number>, decimals = 4): Distribution
 /** Percentage of true values, 2 decimals (0 for an empty mask). */
 export function pct(mask: ArrayLike<number>): number {
   if (mask.length === 0) return 0;
+  return pyRound(100.0 * (countTrue(mask) / mask.length), 2);
+}
+
+/** Number of true values. */
+export function countTrue(mask: ArrayLike<number>): number {
   let count = 0;
   for (let i = 0; i < mask.length; i += 1) if (mask[i]) count += 1;
-  return pyRound(100.0 * (count / mask.length), 2);
+  return count;
 }
 
 /** (start, end) index pairs, end exclusive, of each run of true values. */
@@ -52,6 +57,19 @@ export function runs(mask: ArrayLike<number>): Array<[number, number]> {
   if (start >= 0) out.push([start, mask.length]);
   return out;
 }
+
+/** Length of the longest run of true values (0 when there is none). */
+export function longestRun(mask: ArrayLike<number>): number {
+  let longest = 0; // a loop, not Math.max(...): long videos can have more runs than call arguments allow
+  for (const [a, b] of runs(mask)) longest = Math.max(longest, b - a);
+  return longest;
+}
+
+/** Element-wise AND / OR of two masks of the same length. */
+export const and = (a: ArrayLike<number>, b: ArrayLike<number>): Uint8Array =>
+  Uint8Array.from({ length: a.length }, (_, i) => (a[i] && b[i] ? 1 : 0));
+export const or = (a: ArrayLike<number>, b: ArrayLike<number>): Uint8Array =>
+  Uint8Array.from({ length: a.length }, (_, i) => (a[i] || b[i] ? 1 : 0));
 
 export function not(mask: ArrayLike<number>): Uint8Array {
   const out = new Uint8Array(mask.length);

@@ -237,9 +237,21 @@ export class JobService {
 
   private async finish(id: string, status: JobStatus, message: string, patch: Partial<Job>): Promise<Job> {
     this.cancelled.delete(id);
+    if (status !== "succeeded") await this.removePartialDownloads(id);
     const job = await this.deps.store.update(id, { ...patch, status, finishedAt: this.now().toISOString() });
     await this.record(id, this.jobEvent(status, message));
     return job;
+  }
+
+  /**
+   * A download writes `source/<name>.part` and renames it when complete. A pipeline killed
+   * mid-download (cancel, crash) cannot clean up after itself, so the service does.
+   */
+  private async removePartialDownloads(id: string): Promise<void> {
+    const sourceDir = this.deps.paths.insideJob(id, "source");
+    const files = await fs.readdir(sourceDir).catch(() => [] as string[]);
+    await Promise.all(files.filter((f) => f.endsWith(".part"))
+      .map((f) => fs.rm(path.join(sourceDir, f), { force: true }).catch(() => {})));
   }
 
   private async record(id: string, event: PipelineEvent): Promise<StoredEvent> {

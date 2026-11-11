@@ -7,7 +7,7 @@ import type { Status } from "@/components/ui/StatusBadge";
 import {
   formatBitrate, formatBytes, formatDuration, formatNumber, formatPercent, formatTimecode,
 } from "@/lib/shared/format";
-import type { Distribution, HandMetrics, QCResults, SeriesPreview, TechnicalReport } from "@/lib/shared/types";
+import type { Distribution, HandMetrics, QCReport, QCResults, SeriesPreview, TechnicalReport } from "@/lib/shared/types";
 
 export interface Tile {
   label: string;
@@ -183,19 +183,95 @@ export function imageMeters(t: TechnicalReport): MeterView[] {
   ];
 }
 
-export function handMeters(h: HandMetrics): MeterView[] {
+/** True when `version` ("major.minor") is at least `min`. Unparseable versions count as old. */
+export function schemaAtLeast(version: string, min: string): boolean {
+  const parse = (v: string) => v.split(".").map((part) => Number.parseInt(part, 10));
+  const [major = Number.NaN, minor = 0] = parse(version);
+  const [minMajor = 0, minMinor = 0] = parse(min);
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return false;
+  return major !== minMajor ? major > minMajor : minor >= minMinor;
+}
+
+/**
+ * Report schema that fixed handedness. Older reports ran MediaPipe Tasks on a mirrored
+ * copy of every frame, so each hand was named after the other one.
+ */
+export const HANDEDNESS_FIXED_IN = "1.2";
+
+export function handsSwapped(report: QCReport): boolean {
+  return Boolean(report.hands) && !schemaAtLeast(report.schema_version, HANDEDNESS_FIXED_IN);
+}
+
+export function trackingMeters(h: HandMetrics): MeterView[] {
   return [
     { label: "Either hand visible", value: h.either_hand_pct },
     { label: "Both hands visible", value: h.both_hands_pct },
-    { label: "Hand-object interaction", value: h.HOI_pct, note: "Landmark heuristic, provisional" },
+    { label: "Left hand visible", value: h.left_hand_pct },
+    { label: "Right hand visible", value: h.right_hand_pct },
   ];
 }
 
-export function handTiles(h: HandMetrics): Tile[] {
+export function trackingTiles(h: HandMetrics): Tile[] {
   return [
-    { label: "Grasps", value: formatNumber(h.grasp_count), detail: `Left ${h.per_hand.left.grasp_count} · right ${h.per_hand.right.grasp_count}` },
-    { label: "Mean grasp", value: h.grasp_duration.mean_s === null ? "—" : formatDuration(h.grasp_duration.mean_s), detail: `Longest ${formatDuration(h.grasp_duration.max_s)}` },
-    { label: "Tracking losses", value: formatNumber(h.tracking_losses), detail: `Untracked ${formatPercent(h.untracked_pct)}` },
+    {
+      label: "Tracking losses", value: formatNumber(h.tracking_losses),
+      detail: `Left ${formatNumber(h.per_hand.left.tracking_losses)} · right ${formatNumber(h.per_hand.right.tracking_losses)}`,
+    },
+    { label: "Untracked", value: formatPercent(h.untracked_pct), detail: "No hand detected" },
     { label: "Longest gap", value: formatDuration(h.longest_hand_gap), detail: "Longest stretch with no hand" },
+  ];
+}
+
+/** Below this |laterality index| (45–55% of contact time per hand) neither hand dominates. */
+export const BALANCED_LATERALITY = 0.1;
+
+/** Laterality index (−1 left only … +1 right only) as words plus each hand's share. */
+export function dominantHand(index: number | null): { value: string; detail: string } {
+  if (index === null) return { value: "—", detail: "No contact" };
+  const right = Math.round(((1 + index) / 2) * 100);
+  const value = Math.abs(index) < BALANCED_LATERALITY ? "Balanced" : index > 0 ? "Right" : "Left";
+  return { value, detail: `Contact time: left ${100 - right}% · right ${right}%` };
+}
+
+const pctOrDash = (v: number | null) => (v === null ? "—" : formatPercent(v));
+
+export function hoiMeters(h: HandMetrics): MeterView[] {
+  const meters: MeterView[] = [{ label: "Hand-object interaction", value: h.HOI_pct, note: "Share of time with a hand in contact" }];
+  if (h.hoi) {
+    meters.push(
+      { label: "Contact while visible", value: h.hoi.contact_while_visible_pct, note: "Of the time a hand is visible" },
+      { label: "Two-handed contact", value: h.hoi.bimanual_pct, note: "Both hands in contact at once" },
+      { label: "Idle hands", value: h.hoi.idle_hands_pct, note: "A hand is visible, neither is in contact" },
+    );
+  }
+  return meters;
+}
+
+/** Six tiles with the HOI block (one row wide, 3 × 2 or 2 × 3 narrower); two without it. */
+export function hoiTiles(h: HandMetrics): Tile[] {
+  const counts = `${formatNumber(h.per_hand.left.grasp_count)} · right ${formatNumber(h.per_hand.right.grasp_count)}`;
+  const meanGrasp: Tile = {
+    label: "Mean grasp",
+    value: h.grasp_duration.mean_s === null ? "—" : formatDuration(h.grasp_duration.mean_s),
+    detail: `Longest ${formatDuration(h.grasp_duration.max_s)}`,
+  };
+  const hoi = h.hoi;
+  if (!hoi) return [{ label: "Grasps", value: formatNumber(h.grasp_count), detail: `Left ${counts}` }, meanGrasp];
+  const side = (key: "left" | "right", label: string): Tile => ({
+    label: `${label} hand in contact`,
+    value: formatPercent(hoi.per_hand[key].contact_pct),
+    detail: `${pctOrDash(hoi.per_hand[key].contact_while_visible_pct)} of its visible time`,
+  });
+  return [
+    {
+      label: "Grasp rate",
+      value: hoi.grasps_per_min === null ? "—" : `${formatNumber(hoi.grasps_per_min, 1)} / min`,
+      detail: `${formatNumber(h.grasp_count)} grasps: left ${counts}`,
+    },
+    meanGrasp,
+    { label: "Dominant hand", ...dominantHand(hoi.laterality_index) },
+    side("left", "Left"),
+    side("right", "Right"),
+    { label: "Longest without contact", value: formatDuration(hoi.longest_no_contact_s), detail: "Longest stretch with no grasp" },
   ];
 }

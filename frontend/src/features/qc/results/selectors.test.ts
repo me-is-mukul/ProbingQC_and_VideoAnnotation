@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { makePreview, makeResults } from "../../../../tests/fixtures/results";
+import { legacyHandMetrics, makePreview, makeResults } from "../../../../tests/fixtures/results";
 import {
-  column, distributionDetail, handMeters, handTiles, imageMeters, imageTiles, integrityFlags,
-  ordinal, overviewTiles, rollingMean, scale, windowFor, windowLabel,
+  column, distributionDetail, dominantHand, handsSwapped, hoiMeters, hoiTiles, imageMeters, imageTiles, integrityFlags,
+  ordinal, overviewTiles, rollingMean, scale, schemaAtLeast, trackingMeters, trackingTiles, windowFor, windowLabel,
 } from "./selectors";
 
 describe("selectors", () => {
@@ -52,8 +52,41 @@ describe("selectors", () => {
   it("builds image and hand views", () => {
     expect(imageTiles(r.report.technical).find((t) => t.label === "Colour cast")?.value).toBe("None");
     expect(imageMeters(r.report.technical).map((m) => m.value)).toEqual([0, 0, 0, 0]);
-    expect(handMeters(r.report.hands!).map((m) => m.value)).toEqual([97.3, 81.08, 62.16]);
-    expect(handTiles(r.report.hands!)[0]).toMatchObject({ value: "5", detail: "Left 4 · right 1" });
+    const h = r.report.hands!;
+    expect(trackingMeters(h).map((m) => m.value)).toEqual([97.3, 81.08, 89.19, 89.19]);
+    expect(trackingTiles(h)[0]).toMatchObject({ value: "0", detail: "Left 1 · right 1" });
+    expect(hoiMeters(h).map((m) => m.value)).toEqual([62.16, 63.89, 1.35, 35.14]);
+    const tiles = Object.fromEntries(hoiTiles(h).map((t) => [t.label, t]));
+    expect(Object.keys(tiles)).toEqual([
+      "Grasp rate", "Mean grasp", "Dominant hand", "Left hand in contact", "Right hand in contact", "Longest without contact",
+    ]);
+    expect(tiles["Grasp rate"]).toMatchObject({ value: "30.4 / min", detail: "5 grasps: left 4 · right 1" });
+    expect(tiles["Dominant hand"]).toMatchObject({ value: "Left", detail: "Contact time: left 85% · right 15%" });
+    expect(tiles["Right hand in contact"]).toMatchObject({ value: "9.5%", detail: "10.6% of its visible time" });
+  });
+
+  it("shows only the original interaction figures for reports without the HOI block", () => {
+    const legacy = legacyHandMetrics();
+    expect(hoiMeters(legacy)).toHaveLength(1);
+    expect(hoiTiles(legacy).map((t) => [t.label, t.value, t.detail])).toEqual([
+      ["Grasps", "5", "Left 4 · right 1"], ["Mean grasp", "1.3 s", "Longest 2.3 s"],
+    ]);
+  });
+
+  it("names the dominant hand from the laterality index", () => {
+    expect(dominantHand(null)).toEqual({ value: "—", detail: "No contact" });
+    expect(dominantHand(0.539)).toEqual({ value: "Right", detail: "Contact time: left 23% · right 77%" });
+    expect(dominantHand(-0.08).value).toBe("Balanced");
+    expect(dominantHand(-1).detail).toBe("Contact time: left 100% · right 0%");
+  });
+
+  it("warns that hands are swapped only in reports made before schema 1.2", () => {
+    expect(handsSwapped(r.report)).toBe(false);
+    expect(handsSwapped({ ...r.report, schema_version: "1.1" })).toBe(true);
+    expect(handsSwapped({ ...r.report, schema_version: "1.0", hands: undefined })).toBe(false); // no hands, nothing swapped
+    expect(handsSwapped({ ...r.report, schema_version: "2.0" })).toBe(false);
+    expect([schemaAtLeast("1.10", "1.2"), schemaAtLeast("1.2", "1.2"), schemaAtLeast("0.9", "1.2"), schemaAtLeast("x", "1.2")])
+      .toEqual([true, true, false, false]);
   });
 
   it("smooths 0/1 flags into a rolling share, ignoring gaps", () => {

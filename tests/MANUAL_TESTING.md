@@ -186,6 +186,12 @@ cd tests && python           # REPL with the synthetic builders importable
 | 8.14 | Full metric set on a hand-made sequence | see `test_compute_hand_metrics` | all fields match by hand calculation | ✅ |
 | 8.15 | Empty arrays (0 frames) | — | percentages 0, counts 0, durations `None` | — |
 | 8.16 | Changing stride changes only resolution, not seconds | same clip, stride 2 vs 8 | `*_pct` similar; `grasp_duration` comparable | — |
+| 8.17 | Handedness on a real egocentric frame (MediaPipe Tasks) | `tests/fixtures/egocentric_hands.jpg`, as is and mirrored with `mirrored_input: true` | left hand on the left in both cases (in the mirrored frame's coordinates for the second); fails if frames are flipped for non-mirrored input | ✅ |
+| 8.18 | `palm_size` uses the frame's aspect ratio | wrist→knuckle 10% of the height, 16:9 | 0.05625 of the width | ✅ |
+| 8.19 | Per-frame wrist and size columns | hand present / absent | values / NaN | ✅ |
+| 8.20 | HOI block on the hand-made sequence | see `test_compute_hand_metrics` | `bimanual 0`, `idle 50`, `contact_while_visible 44.44`, `grasps_per_min 60`, `longest_no_contact_s 0.6`, `laterality -1` | ✅ |
+| 8.21 | HOI with no hand, and with no frames | all False / empty | shares and laterality `None`; `grasps_per_min` 0 / `None` | ✅ |
+| 8.22 | Bystander hands | factory footage where the wearer looks up | small detections (`*_size` < 0.045) high in the frame (`*_wrist_y` < 0.5) are other people's hands; about 4% of detections on GX010191 | — |
 
 ## 9. QC: analyzers, orientation, report, pipeline
 
@@ -249,7 +255,7 @@ cd tests && python           # REPL with the synthetic builders importable
 | 10b.15 | Keyframe index (`keyframes.parse_packets`): GOP of 30, B-frame reordering, `N/A` pts, discard flag, all-intra, no packets | ffprobe lines | `[0, 30, ...]` in display order / skipped / `"all"` / `None` | ✅ |
 | 10b.16 | Keyframe index on a real file | GoPro HEVC | about one keyframe per second; the probe stage logs "N keyframes, every 30 frames (1.00 s)"; a 3.3 GB file scans in about 5 s | ✅ (synthetic) / — (GoPro) |
 | 10b.17 | `results.json` 1.1 fields | any job | `video.has_audio`, `video.has_b_frames` (GoPro 0, libx264 default > 0), `keyframes` | ✅ |
-| 10b.18 | Probe metric parity: the browser's port gives the Python numbers | `python tests/probe_parity.py` then `pytest tests/test_probe_parity.py` and the frontend `npm test` | fixture current; TypeScript equal to Python, exactly | ✅ |
+| 10b.18 | Probe metric parity: the browser's port gives the Python numbers (including `hands.hoi`) | `python tests/probe_parity.py` then `pytest tests/test_probe_parity.py` and the frontend `npm test` | fixture current; TypeScript equal to Python, exactly | ✅ |
 
 ## 11. End-to-end on real footage (manual, slow)
 
@@ -269,6 +275,7 @@ probing-qc GX010140.MP4 --start 600 --max-seconds 60 --frames-csv --output-dir t
 | 11.5 | Hand model integrity | `runtime.hand_model_sha256 == fbc2a300…7cde1`; corrupting `models/hand_landmarker.task` triggers a re-download |
 | 11.6 | 2.7K / 59.94 fps clip (`input/mono samples/GX010146.MP4`) | runs; `analysis_fps ≈ 14.99` |
 | 11.7 | Visual check of hand metrics | play 10 s with `--frames-csv`, compare `left`/`right`/`*_contact` columns against what you see; note left/right swaps when hands cross |
+| 11.8 | Left and right follow the wearer's hands (head-mounted footage) | with `--frames-csv`, rows with both hands: `left_wrist_x < right_wrist_x` in nearly all (GX010191 260–320 s, 2026-11-10: 256 of 256); mean `left_wrist_x` below 0.5, `right_wrist_x` above |
 
 Diff two reports while ignoring the runtime block:
 

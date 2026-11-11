@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getConfig, type ServerConfig } from "./config";
+import { acquireDataLock } from "./data-lock";
 import { DataPaths } from "./data-paths";
 import { EventHub } from "./jobs/event-hub";
 import { JobQueue } from "./jobs/job-queue";
@@ -31,13 +32,24 @@ export function createServices(config: ServerConfig): Services {
     pythonBin: config.pythonBin,
     pipelineRoot: config.pipelineRoot,
   });
-  const ready = jobs
-    .recoverInterrupted()
-    .then((n) => {
-      if (n) console.warn(`[jobs] marked ${n} interrupted job(s) as failed`);
-    })
-    .catch((error) => console.error("[jobs] recovery failed", error));
+  const ready = startUp(jobs, config.dataDir).catch((error) => console.error("[jobs] start-up failed", error));
   return { config, paths, uploads, jobs, ready };
+}
+
+/**
+ * Jobs left queued or running belong to a server that stopped, unless another live server
+ * is using the same data folder: then they are its jobs, and marking them failed would
+ * break them. The data-folder lock tells the two cases apart.
+ */
+async function startUp(jobs: JobService, dataDir: string): Promise<void> {
+  const lock = await acquireDataLock(dataDir);
+  if (!lock.owned) {
+    console.warn(`[jobs] another server (pid ${lock.owner}) is using ${dataDir}; its unfinished jobs are left alone. `
+      + "Run one server per DATA_DIR.");
+    return;
+  }
+  const n = await jobs.recoverInterrupted();
+  if (n) console.warn(`[jobs] marked ${n} interrupted job(s) as failed`);
 }
 
 // Kept on globalThis so Next's dev-mode module reloads don't create a second job runner.

@@ -118,6 +118,18 @@ describe("JobService", () => {
     expect(runner.started).toHaveLength(1); // the cancelled job never started
   });
 
+  it("removes a partial download when a URL job is cancelled mid-download", async () => {
+    const { service, runner, paths } = await setup();
+    const job = await service.create({ source: { kind: "url", url: new URL("https://x.org/GX010146.MP4") }, options: { hands: true, imu: true } });
+    await vi.waitFor(() => expect(runner.started).toHaveLength(1));
+    const source = paths.insideJob(job.id, "source");
+    await fs.mkdir(source, { recursive: true });
+    await fs.writeFile(`${source}/GX010146.MP4.part`, "half a video"); // what Python leaves when killed
+    await service.cancel(job.id); // the fake runner exits on kill(), as a killed process would
+    await waitForStatus(service, job.id, "cancelled");
+    expect(await fs.readdir(source)).toEqual([]);
+  });
+
   it("cancels a running job by killing its process", async () => {
     const { service, runner, createUploadJob } = await setup();
     const job = await createUploadJob();

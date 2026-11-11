@@ -10,7 +10,7 @@ import pandas as pd
 from ..config import HandConfig
 from ..frames import Frame
 from ..hands.interaction import InteractionDetector, LandmarkGraspDetector, hand_shape
-from ..hands.landmarks import SIDES, FrameHands
+from ..hands.landmarks import SIDES, WRIST, FrameHands, palm_size
 from ..hands.metrics import compute_hand_metrics
 from .base import FrameAnalyzer
 
@@ -21,19 +21,26 @@ class Detector(Protocol):
 
 
 def hand_row(hands: FrameHands, frame: Frame, interaction: InteractionDetector) -> dict:
-    """Per-frame columns for both sides: presence, score, curl, pinch, contact.
+    """Per-frame columns for both sides: presence, score, curl, pinch, contact, wrist, size.
 
     A missing hand gives ``False`` presence/contact and NaN for the numeric columns.
+    Curl and pinch are recorded to calibrate the grasp thresholds; wrist position
+    (normalised, 0-1) and ``size`` (``palm_size``) to tell the wearer's hands from
+    other people's.
     """
+    height, width = frame.rgb.shape[:2]
     row = {}
     for side in SIDES:
         hand = getattr(hands, side)
         curl, pinch = hand_shape(hand.world_landmarks) if hand else (np.nan, np.nan)
         row[side] = hand is not None
         row[f"{side}_score"] = hand.score if hand else np.nan
-        row[f"{side}_curl"] = curl    # recorded for threshold calibration
+        row[f"{side}_curl"] = curl
         row[f"{side}_pinch"] = pinch
         row[f"{side}_contact"] = bool(hand and interaction.in_contact(hand, frame))
+        row[f"{side}_wrist_x"] = float(hand.landmarks[WRIST, 0]) if hand else np.nan
+        row[f"{side}_wrist_y"] = float(hand.landmarks[WRIST, 1]) if hand else np.nan
+        row[f"{side}_size"] = palm_size(hand.landmarks, height / width) if hand else np.nan
     return row
 
 

@@ -1,8 +1,13 @@
 """MediaPipe hand landmark detection with egocentric left/right handling.
 
-MediaPipe assumes a mirrored (selfie) image when labelling handedness. For
-head-mounted footage the frame is flipped before detection so the labels refer
-to the wearer's hands, and coordinates are flipped back afterwards.
+MediaPipe Tasks' HandLandmarker labels handedness from the subject's point of
+view on an unmirrored camera image: in head- or chest-mounted footage its
+"Left" is the wearer's left hand. (The legacy ``mp.solutions.hands`` API assumed
+a mirrored selfie image instead; flipping for that reason swaps every label with
+the Tasks API, which reports before schema 1.2 did.) Only footage that is itself
+mirrored (``mirrored_input``) is flipped before detection, and its coordinates
+are flipped back afterwards. ``tests/test_hand_detector.py`` pins this on a real
+egocentric frame.
 """
 
 from __future__ import annotations
@@ -41,7 +46,7 @@ class HandDetector:
 
     def detect(self, rgb: np.ndarray, timestamp_ms: int) -> FrameHands:
         img = resize_to_width(rgb, self.cfg.input_width)
-        flip = not self.cfg.mirrored_input
+        flip = self.cfg.mirrored_input  # undo the mirror so MediaPipe sees true handedness
         if flip:
             img = img[:, ::-1]
         image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=np.ascontiguousarray(img))

@@ -20,6 +20,7 @@ import { ImuSection } from "./ImuSection";
 import { OverviewSection } from "./OverviewSection";
 import styles from "./results.module.css";
 import type { SectionProbeProps } from "./Section";
+import { handsSwapped } from "./selectors";
 
 export interface ResultsDashboardProps {
   results: QCResults;
@@ -95,6 +96,7 @@ export function ResultsDashboard({ results, jobId, currentTime, onSeek, onNewAna
           hands={results.report.hands}
           probe={sectionProbe("hands")}
           metrics={probe.metrics?.hands ?? null}
+          swapped={handsSwapped(results.report)}
           currentTime={currentTime}
           onSeek={onSeek}
         />

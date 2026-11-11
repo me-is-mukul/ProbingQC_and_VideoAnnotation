@@ -5,7 +5,8 @@ from __future__ import annotations
 import numpy as np
 
 from ..config import HandConfig
-from ..stats import drop_short, fill_gaps, pct, runs
+from ..stats import drop_short, fill_gaps, longest_run, pct, runs
+from .hoi import hoi_metrics
 
 
 def seconds_to_frames(seconds: float, dt: float) -> int:
@@ -25,8 +26,7 @@ def tracking_losses(present: np.ndarray, min_gap: int) -> int:
 
 def longest_gap_s(present: np.ndarray, dt: float) -> float:
     """Longest run of ``False`` in seconds (0 when always present)."""
-    gaps = runs(~np.asarray(present, bool))
-    return float((gaps[:, 1] - gaps[:, 0]).max() * dt) if len(gaps) else 0.0
+    return float(longest_run(~np.asarray(present, bool)) * dt)
 
 
 def grasp_episodes(contact: np.ndarray, dt: float, cfg: HandConfig) -> tuple[np.ndarray, np.ndarray]:
@@ -54,7 +54,8 @@ def compute_hand_metrics(left: np.ndarray, right: np.ndarray,
                          dt: float, cfg: HandConfig) -> dict:
     """All inputs are boolean arrays over the analysed frames; ``dt`` is seconds per sample.
 
-    Contact only counts while that hand is detected.
+    Contact only counts while that hand is detected. ``hoi`` holds the hand-object
+    interaction breakdown (``hoi.py``).
     """
     left, right = np.asarray(left, bool), np.asarray(right, bool)
     either, both = left | right, left & right
@@ -80,4 +81,5 @@ def compute_hand_metrics(left: np.ndarray, right: np.ndarray,
         "grasp_duration": duration_summary(episodes),
         "longest_hand_gap": round(longest_gap_s(either, dt), 2),
         "per_hand": {"left": per_hand(left, left_eps), "right": per_hand(right, right_eps)},
+        "hoi": hoi_metrics(left, right, left_mask, right_mask, int(episodes.size), dt),
     }

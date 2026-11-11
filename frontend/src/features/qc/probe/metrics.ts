@@ -1,7 +1,8 @@
 /**
  * The report's image and hand metrics, recomputed for the frames a probe keeps. Ports of
  * ImageQualityAnalyzer.summarize (qc/analyzers/image.py) and compute_hand_metrics
- * (qc/hands/metrics.py); probe-parity.json holds the Python outputs they must reproduce.
+ * (qc/hands/metrics.py, its HOI block in ./hoi.ts); probe-parity.json holds the Python
+ * outputs they must reproduce.
  *
  * The probed video is the kept frames played back to back, so run-based numbers (grasps,
  * tracking losses, gaps) are computed on the concatenated rows, exactly as Python would
@@ -10,8 +11,9 @@
 
 import type { GraspDuration, HandMetrics, TechnicalReport } from "@/lib/shared/types";
 
+import { hoiMetrics } from "./hoi";
 import { mean, pairwiseSum, pyRound, pyRoundInt } from "./numeric";
-import { circularMeanDeg, dropShort, fillGaps, not, pct, runs, summarize } from "./stats";
+import { and, circularMeanDeg, dropShort, fillGaps, longestRun, not, or, pct, runs, summarize } from "./stats";
 
 export interface ImageThresholds {
   dark_luma: number;
@@ -94,9 +96,7 @@ export function trackingLosses(present: ArrayLike<number>, minGap: number): numb
 }
 
 export function longestGapS(present: ArrayLike<number>, dt: number): number {
-  let longest = 0; // a loop, not Math.max(...): long videos can have more gaps than call arguments allow
-  for (const [a, b] of runs(not(present))) longest = Math.max(longest, b - a);
-  return longest * dt;
+  return longestRun(not(present)) * dt;
 }
 
 export function graspEpisodes(contact: ArrayLike<number>, dt: number, c: HandThresholds): { episodes: Float64Array; mask: Uint8Array } {
@@ -118,9 +118,6 @@ export function durationSummary(episodes: Float64Array): GraspDuration {
     max_s: pyRound(sorted[n - 1]!, 2),
   };
 }
-
-const and = (a: ArrayLike<number>, b: ArrayLike<number>) => Uint8Array.from({ length: a.length }, (_, i) => (a[i] && b[i] ? 1 : 0));
-const or = (a: ArrayLike<number>, b: ArrayLike<number>) => Uint8Array.from({ length: a.length }, (_, i) => (a[i] || b[i] ? 1 : 0));
 
 /** compute_hand_metrics on the given rows. Contact only counts while that hand is detected. */
 export function handMetrics(cols: HandColumns, rows: ArrayLike<number>, dt: number, c: HandThresholds): HandMetrics {
@@ -149,5 +146,6 @@ export function handMetrics(cols: HandColumns, rows: ArrayLike<number>, dt: numb
     grasp_duration: durationSummary(episodes),
     longest_hand_gap: pyRound(longestGapS(either, dt), 2),
     per_hand: { left: perHand(left, l.episodes), right: perHand(right, r.episodes) },
+    hoi: hoiMetrics(left, right, l.mask, r.mask, episodes.length, dt),
   };
 }

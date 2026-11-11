@@ -57,6 +57,22 @@
   font-size: 15px;
 }
 
+/* a titled block of meters and tiles inside a section */
+.group {
+  display: grid;
+  gap: 14px;
+}
+
+.groupHead {
+  display: grid;
+  gap: 2px;
+}
+
+.groupHead h3 {
+  font-size: 17px;
+  font-weight: 600;
+}
+
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

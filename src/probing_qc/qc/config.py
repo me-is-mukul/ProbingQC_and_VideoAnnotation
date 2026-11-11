@@ -39,7 +39,7 @@ class HandConfig:
     min_detection_confidence: float = 0.5
     min_presence_confidence: float = 0.5
     min_tracking_confidence: float = 0.5
-    mirrored_input: bool = False     # False for head/chest-mounted (egocentric) footage
+    mirrored_input: bool = False     # True only for horizontally mirrored (selfie-view) footage
     min_loss_s: float = 0.5          # shorter no-hand gaps are not counted as tracking losses
     grasp_curl_ratio: float = 1.3    # fingertip-wrist / palm length below this = closed hand
     grasp_pinch_ratio: float = 0.35  # thumb-index tip distance / palm length below this = pinch

@@ -49,7 +49,8 @@ def _runs(rng: random.Random, n: int, p_on: float, p_off: float) -> list[bool]:
     return out
 
 
-def make_table(n: int, seed: int) -> dict:
+def make_table(n: int, seed: int, hands: bool = True) -> dict:
+    """A frames table; ``hands=False`` never detects a hand (null HOI shares and laterality)."""
     rng = random.Random(seed)
     r4 = lambda x: round(x, 4)  # noqa: E731  (the frames CSV stores 4 decimals)
     lum = [r4(min(255.0, max(0.0, _normal(rng, 95, 55)))) for _ in range(n)]
@@ -61,6 +62,8 @@ def make_table(n: int, seed: int) -> dict:
     right = _runs(rng, n, 0.06, 0.07)
     lc = [l and c for l, c in zip(left, _runs(rng, n, 0.2, 0.25))]
     rc = [r and c for r, c in zip(right, _runs(rng, n, 0.2, 0.25))]
+    if not hands:
+        left = right = lc = rc = [False] * n
     return {
         "luminance": lum,
         "sharpness": [r4(abs(_normal(rng, 160, 90))) for _ in range(n)],
@@ -86,7 +89,8 @@ def make_masks(n: int, seed: int) -> dict[str, list[bool]]:
 
 
 def make_inputs() -> dict:
-    tables = {"t257": make_table(257, 11), "t1000": make_table(1000, 12)}
+    tables = {"t257": make_table(257, 11), "t1000": make_table(1000, 12),
+              "t40_no_hands": make_table(40, 13, hands=False)}
     image_default = {k: getattr(ImageConfig(), k) for k in IMAGE_KEYS}
     hand_default = {k: getattr(HandConfig(), k) for k in HAND_KEYS}
     variants = [

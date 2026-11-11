@@ -31,6 +31,12 @@ def runs(mask) -> np.ndarray:
     return np.column_stack((np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)))
 
 
+def longest_run(mask) -> int:
+    """Length of the longest run of True values (0 when there is none)."""
+    r = runs(mask)
+    return int((r[:, 1] - r[:, 0]).max()) if len(r) else 0
+
+
 def fill_gaps(mask, max_gap: int) -> np.ndarray:
     """Set interior False runs of length <= ``max_gap`` to True."""
     m = np.asarray(mask, dtype=bool).copy()

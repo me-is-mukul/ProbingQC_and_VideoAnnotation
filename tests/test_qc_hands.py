@@ -7,8 +7,9 @@ import pytest
 
 from helpers import make_hand
 from probing_qc.qc.config import HandConfig
+from probing_qc.qc.hands.hoi import hoi_metrics, laterality_index, per_minute, share_pct
 from probing_qc.qc.hands.interaction import LandmarkGraspDetector, hand_shape
-from probing_qc.qc.hands.landmarks import FrameHands, assign_sides, unmirror
+from probing_qc.qc.hands.landmarks import FrameHands, assign_sides, palm_size, unmirror
 from probing_qc.qc.hands.metrics import (
     compute_hand_metrics, duration_summary, grasp_episodes, longest_gap_s, seconds_to_frames,
     tracking_losses,
@@ -40,6 +41,15 @@ def test_assign_sides_trusts_distinct_labels_and_caps_at_two():
 def test_frame_hands_iter():
     assert list(FrameHands()) == []
     assert [h.side for h in FrameHands(right=make_hand("right", 0.5))] == ["right"]
+
+
+def test_palm_size_is_a_fraction_of_frame_width():
+    lms = np.zeros((21, 3), np.float32)
+    lms[0, :2] = (0.5, 0.5)       # wrist
+    lms[9, :2] = (0.5, 0.4)       # middle MCP, 10% of the frame height above it
+    assert palm_size(lms, aspect=9 / 16) == pytest.approx(0.1 * 9 / 16)
+    lms[9, :2] = (0.8, 0.5)
+    assert palm_size(lms, aspect=9 / 16) == pytest.approx(0.3)
 
 
 def test_unmirror_returns_flipped_copies():
@@ -121,6 +131,45 @@ def test_compute_hand_metrics():
     assert m["grasp_duration"]["total_s"] == pytest.approx(0.4)
     assert m["HOI_pct"] == 40.0
     assert m["per_hand"]["left"]["tracking_losses"] == 1
+    # cleaned contact: left frames 0-3 only, right none
+    assert m["hoi"] == {
+        "bimanual_pct": 0.0,
+        "idle_hands_pct": 50.0,                 # frames 4, 5, 7, 8, 9: a hand visible, no contact
+        "contact_while_visible_pct": 44.44,     # 4 of the 9 frames with a hand
+        "grasps_per_min": 60.0,                 # 1 grasp in 1 s
+        "longest_no_contact_s": 0.6,            # frames 4-9
+        "laterality_index": -1.0,               # left hand only
+        "per_hand": {"left": {"contact_pct": 40.0, "contact_while_visible_pct": 57.14},
+                     "right": {"contact_pct": 0.0, "contact_while_visible_pct": 0.0}},
+    }
+
+
+def test_hoi_bimanual_and_balance():
+    on = np.ones(4, bool)
+    h = hoi_metrics(on, on, B([1, 1, 1, 0], bool), B([0, 1, 1, 1], bool), grasps=2, dt=0.5)
+    assert h["bimanual_pct"] == 50.0
+    assert h["idle_hands_pct"] == 0.0 and h["contact_while_visible_pct"] == 100.0
+    assert h["laterality_index"] == 0.0
+    assert h["grasps_per_min"] == 60.0          # 2 grasps in 2 s
+    assert h["longest_no_contact_s"] == 0.0
+
+
+def test_hoi_without_hands_or_frames():
+    off = np.zeros(3, bool)
+    h = hoi_metrics(off, off, off, off, grasps=0, dt=0.1)
+    assert h["contact_while_visible_pct"] is None and h["laterality_index"] is None
+    assert h["per_hand"]["left"] == {"contact_pct": 0.0, "contact_while_visible_pct": None}
+    assert h["grasps_per_min"] == 0.0 and h["longest_no_contact_s"] == 0.3
+    empty = np.zeros(0, bool)
+    e = hoi_metrics(empty, empty, empty, empty, grasps=0, dt=0.1)
+    assert e["grasps_per_min"] is None and e["longest_no_contact_s"] == 0.0 and e["idle_hands_pct"] == 0.0
+
+
+def test_hoi_helpers():
+    assert share_pct(B([1, 0, 0], bool), B([1, 1, 1], bool)) == 33.33
+    assert share_pct(B([0], bool), B([0], bool)) is None
+    assert laterality_index(B([1, 0, 0, 0], bool), B([1, 1, 1, 0], bool)) == 0.5
+    assert per_minute(3, 0, 0.1) is None and per_minute(3, 30, 0.1) == 60.0
 
 
 def test_contact_without_presence_is_ignored():

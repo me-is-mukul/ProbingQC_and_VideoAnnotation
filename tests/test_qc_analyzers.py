@@ -61,6 +61,10 @@ def test_hand_row_missing_and_present():
     row = hand_row(FrameHands(left=make_hand("left", 0.2, curl=1.0)), frame(), LandmarkGraspDetector())
     assert row["left"] and row["left_contact"] and row["left_curl"] == pytest.approx(1.0)
     assert not row["right"] and not row["right_contact"] and np.isnan(row["right_score"])
+    # make_hand: wrist at (0.2, 0), every other landmark at (0, 0) -> palm 0.2 of the width
+    assert (row["left_wrist_x"], row["left_wrist_y"]) == pytest.approx((0.2, 0.0))
+    assert row["left_size"] == pytest.approx(0.2)
+    assert all(np.isnan(row[f"right_{c}"]) for c in ("wrist_x", "wrist_y", "size"))
 
 
 def test_hand_analyzer_with_stub_detector():

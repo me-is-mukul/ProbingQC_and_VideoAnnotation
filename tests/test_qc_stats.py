@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from probing_qc.qc.stats import circular_mean_deg, drop_short, fill_gaps, pct, runs, summarize
+from probing_qc.qc.stats import circular_mean_deg, drop_short, fill_gaps, longest_run, pct, runs, summarize
 
 B = np.array
 
@@ -13,6 +13,12 @@ def test_runs():
     np.testing.assert_array_equal(runs(B([1, 1, 1], bool)), [[0, 3]])
     assert runs(B([0, 0], bool)).shape == (0, 2)
     assert runs(B([], bool)).shape == (0, 2)
+
+
+def test_longest_run():
+    assert longest_run(B([1, 0, 1, 1, 0, 1], bool)) == 2
+    assert longest_run(B([0, 0], bool)) == 0
+    assert longest_run(B([], bool)) == 0
 
 
 def test_fill_gaps_only_interior():
